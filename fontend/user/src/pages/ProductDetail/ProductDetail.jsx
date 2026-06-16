@@ -76,7 +76,7 @@ const ProductDetail = () => {
         const dbImageUrl = pData.imageUrl || pData.imgUrl || pData.img_url || pData.image;
         let formattedImageUrl = dbImageUrl;
         if (dbImageUrl && dbImageUrl.startsWith('/uploads/')) {
-          formattedImageUrl = `http://localhost:8080${dbImageUrl}`;
+          formattedImageUrl = `http://localhost:8082${dbImageUrl}`;
         }
         
         const fallbackDBImage = formattedImageUrl || '/images/products/gpu_original.png';

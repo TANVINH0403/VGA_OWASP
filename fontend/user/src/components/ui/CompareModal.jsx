@@ -25,7 +25,7 @@ const CompareModal = () => {
                   const dbImageUrl = item.imageUrl || item.imgUrl || item.img_url || item.image || (item.images && item.images.length > 0 && item.images[0]?.url);
                   let formattedImageUrl = dbImageUrl;
                   if (dbImageUrl && dbImageUrl.startsWith('/uploads/')) {
-                    formattedImageUrl = `http://localhost:8080${dbImageUrl}`;
+                    formattedImageUrl = `http://localhost:8082${dbImageUrl}`;
                   }
                   return (
                     <td key={item.id} style={styles.dataCol}>

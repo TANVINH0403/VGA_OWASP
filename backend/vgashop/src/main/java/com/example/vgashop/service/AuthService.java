@@ -2,6 +2,7 @@ package com.example.vgashop.service;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.vgashop.dto.AuthResponse;
 import com.example.vgashop.dto.GoogleLoginRequest;
@@ -11,72 +12,119 @@ import com.example.vgashop.entity.Role;
 import com.example.vgashop.entity.User;
 import com.example.vgashop.exception.DuplicateResourceException;
 import com.example.vgashop.exception.ResourceNotFoundException;
-import com.example.vgashop.repository.UserRepository;
 import com.example.vgashop.security.JwtUtil;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class AuthService {
 
-    private final UserRepository       userRepository;
     private final JwtUtil              jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
     private EntityManager entityManager;
 
-    public AuthService(UserRepository userRepository, JwtUtil jwtUtil) {
-        this.userRepository  = userRepository;
+    public AuthService(JwtUtil jwtUtil) {
         this.jwtUtil         = jwtUtil;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
+    private boolean existsByEmail(String email) {
+        Number count = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE email = :email")
+                .setParameter("email", email)
+                .getSingleResult();
+        return count.intValue() > 0;
+    }
+
+    private boolean existsByUsername(String username) {
+        Number count = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE username = :username")
+                .setParameter("username", username)
+                .getSingleResult();
+        return count.intValue() > 0;
+    }
+
+    private User findByUsername(String username) {
+        try {
+            return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE username = :username", User.class)
+                    .setParameter("username", username)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
+    }
+
+    private User findByEmail(String email) {
+        try {
+            return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE email = :email", User.class)
+                    .setParameter("email", email)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
+    }
+
+    @Transactional
     public AuthResponse register(RegisterRequest req) {
-        if (userRepository.existsByEmail(req.getEmail()))
+        if (existsByEmail(req.getEmail()))
             throw new DuplicateResourceException("Email is already in use");
-        if (userRepository.existsByUsername(req.getUsername()))
+        if (existsByUsername(req.getUsername()))
             throw new DuplicateResourceException("Username is already taken");
 
-        User user = new User();
-        user.setUsername(req.getUsername());
-        user.setEmail(req.getEmail());
-        user.setPassword(passwordEncoder.encode(req.getPassword()));
-        user.setFullName(req.getFullName());
-        user.setRole(Role.USER);
-        user.setStatus(true);
+        String insertSql = "INSERT INTO users (username, email, password, full_name, role, status, deleted) " +
+                           "VALUES (:username, :email, :password, :fullName, :role, true, false)";
 
-        User saved = userRepository.save(user);
+        entityManager.createNativeQuery(insertSql)
+                .setParameter("username", req.getUsername())
+                .setParameter("email", req.getEmail())
+                .setParameter("password", passwordEncoder.encode(req.getPassword()))
+                .setParameter("fullName", req.getFullName())
+                .setParameter("role", Role.USER.name())
+                .executeUpdate();
+
+        User saved = findByUsername(req.getUsername());
+        
         return new AuthResponse(jwtUtil.generateToken(saved.getUsername(), saved.getRole()),
                 saved.getUsername(), saved.getEmail(), saved.getRole().name(), saved.getId(),
                 "Registration successful");
     }
 
+    @Transactional
     public AuthResponse register(UserDTO dto) {
-        if (userRepository.existsByUsername(dto.getUsername()))
+        if (existsByUsername(dto.getUsername()))
             throw new DuplicateResourceException("Username is already taken");
-        if (userRepository.existsByEmail(dto.getEmail()))
+        if (existsByEmail(dto.getEmail()))
             throw new DuplicateResourceException("Email is already in use");
 
-        User user = new User();
-        user.setUsername(dto.getUsername());
-        user.setEmail(dto.getEmail());
-        user.setPassword(passwordEncoder.encode(dto.getPassword()));
-        user.setFullName(dto.getFullName());
-        user.setPhone(dto.getPhone());
-        user.setAddress(dto.getAddress());
-        user.setRole(dto.getRole() != null ? Role.valueOf(dto.getRole().toUpperCase()) : Role.USER);
-        user.setStatus(true);
+        String roleStr = dto.getRole() != null ? dto.getRole().toUpperCase() : Role.USER.name();
 
-        User saved = userRepository.save(user);
+        String insertSql = "INSERT INTO users (username, email, password, full_name, phone, address, role, status, deleted) " +
+                           "VALUES (:username, :email, :password, :fullName, :phone, :address, :role, true, false)";
+
+        entityManager.createNativeQuery(insertSql)
+                .setParameter("username", dto.getUsername())
+                .setParameter("email", dto.getEmail())
+                .setParameter("password", passwordEncoder.encode(dto.getPassword()))
+                .setParameter("fullName", dto.getFullName())
+                .setParameter("phone", dto.getPhone())
+                .setParameter("address", dto.getAddress())
+                .setParameter("role", roleStr)
+                .executeUpdate();
+
+        User saved = findByUsername(dto.getUsername());
+
         return new AuthResponse(jwtUtil.generateToken(saved.getUsername(), saved.getRole()),
                 saved.getUsername(), saved.getEmail(), saved.getRole().name(), saved.getId(),
                 "Registration successful");
     }
 
     public AuthResponse login(String username, String password) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Invalid username or password"));
+        User user = findByUsername(username);
+        
+        if (user == null) {
+            throw new ResourceNotFoundException("Invalid username or password");
+        }
 
         if (Boolean.TRUE.equals(user.isDeleted()))
             throw new RuntimeException("Account does not exist or has been removed");
@@ -90,49 +138,28 @@ public class AuthService {
                 "Login successful");
     }
 
-    /**
-     * [OWASP A03 - SQL INJECTION] Đăng nhập lỗ hổng dùng native SQL nối chuỗi trực tiếp.
-     * Payload bypass: username = admin'-- (bỏ qua kiểm tra password)
-     * Payload dump:   username = ' OR '1'='1'-- (lấy user đầu tiên trong DB)
-     */
-    @SuppressWarnings("unchecked")
-    public AuthResponse loginVulnerable(String username, String password) {
-        // Cố ý cộng chuỗi thành SQL → kẻ tấn công có thể bypass toàn bộ xác thực
-        String sql = "SELECT * FROM users WHERE username = '" + username
-                   + "' AND password = '" + password + "' AND deleted = false LIMIT 1";
-
-        java.util.List<User> results = entityManager.createNativeQuery(sql, User.class).getResultList();
-
-        if (results.isEmpty()) {
-            throw new RuntimeException("Sắtọn đăng nhập không hợp lệ (vulnerable endpoint)");
-        }
-
-        User user = results.get(0);
-        // Trả về JWT token → nếu bypass được, kẻ tấn công lấy token admin
-        return new AuthResponse(
-                jwtUtil.generateToken(user.getUsername(), user.getRole()),
-                user.getUsername(), user.getEmail(), user.getRole().name(), user.getId(),
-                "Login successful (vulnerable endpoint)"
-        );
-    }
-
+    @Transactional
     public AuthResponse googleLogin(GoogleLoginRequest req) {
-        User user = userRepository.findByEmail(req.getEmail()).orElse(null);
+        User user = findByEmail(req.getEmail());
 
         if (user == null) {
             String prefix   = req.getEmail().split("@")[0];
             String username = prefix;
             int    counter  = 1;
-            while (userRepository.existsByUsername(username)) username = prefix + counter++;
+            while (existsByUsername(username)) username = prefix + counter++;
 
-            user = new User();
-            user.setUsername(username);
-            user.setEmail(req.getEmail());
-            user.setPassword(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
-            user.setFullName(req.getName());
-            user.setRole(Role.USER);
-            user.setStatus(true);
-            user = userRepository.save(user);
+            String insertSql = "INSERT INTO users (username, email, password, full_name, role, status, deleted) " +
+                               "VALUES (:username, :email, :password, :fullName, :role, true, false)";
+
+            entityManager.createNativeQuery(insertSql)
+                    .setParameter("username", username)
+                    .setParameter("email", req.getEmail())
+                    .setParameter("password", passwordEncoder.encode(java.util.UUID.randomUUID().toString()))
+                    .setParameter("fullName", req.getName())
+                    .setParameter("role", Role.USER.name())
+                    .executeUpdate();
+                    
+            user = findByUsername(username);
         } else {
             if (Boolean.FALSE.equals(user.getStatus()))
                 throw new RuntimeException("Account is disabled");

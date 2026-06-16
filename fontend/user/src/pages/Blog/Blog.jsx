@@ -340,7 +340,7 @@ const Blog = () => {
 function BlogCard({ post }) {
   const resolveImg = (url) => {
     if (!url) return '/images/products/gpu_original.png';
-    if (url.startsWith('/uploads/')) return `http://localhost:8080${url}`;
+    if (url.startsWith('/uploads/')) return `http://localhost:8082${url}`;
     if (url.startsWith('http')) return url;
     return url;
   };

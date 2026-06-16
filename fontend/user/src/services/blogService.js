@@ -14,7 +14,7 @@ const processImageUrl = (blog, index) => {
   const thumb = blog.thumbnail || blog.image || blog.imgUrl;
   if (thumb) {
     // Image
-    if (thumb.startsWith('/uploads/')) return `http://localhost:8080${thumb}`;
+    if (thumb.startsWith('/uploads/')) return `http://localhost:8082${thumb}`;
     // Image
     if (thumb.startsWith('/images/')) return thumb;
     if (thumb.startsWith('http')) return thumb;

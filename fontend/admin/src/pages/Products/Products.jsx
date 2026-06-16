@@ -41,9 +41,9 @@ const Products = () => {
   // Process
   const getImageUrl = (imgUrl) => {
     if (!imgUrl) return null;
-    if (imgUrl.startsWith('/uploads/')) return `http://localhost:8080${imgUrl}`;
+    if (imgUrl.startsWith('/uploads/')) return `http://localhost:8082${imgUrl}`;
     // Image
-    if (imgUrl.startsWith('/images/')) return `http://localhost:5173${imgUrl}`;
+    if (imgUrl.startsWith('/images/')) return `http://localhost:5175${imgUrl}`;
 
     return imgUrl;
   };
@@ -134,7 +134,7 @@ const Products = () => {
                           src={getImageUrl(p.imgUrl || p.imageUrl)} 
                           alt={p.name} 
                           className="product-thumb"
-                          onError={(e) => { e.target.onerror = null; e.target.src = 'http://localhost:5173/images/products/gpu_original.png'; }}
+                          onError={(e) => { e.target.onerror = null; e.target.src = 'http://localhost:5175/images/products/gpu_original.png'; }}
                         />
                       ) : (
                         <div className="product-thumb-empty" style={{display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg-hover)', color:'var(--text-muted)'}}><Monitor size={20} /></div>

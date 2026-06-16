@@ -27,10 +27,10 @@ const BlogForm = () => {
 
   const getImageUrl = (url) => {
     if (!url) return null;
-    if (url.startsWith('/uploads/')) return `http://localhost:8080${url}`;
-    if (url.startsWith('/images/')) return `http://localhost:5173${url}`;
+    if (url.startsWith('/uploads/')) return `http://localhost:8082${url}`;
+    if (url.startsWith('/images/')) return `http://localhost:5175${url}`;
     if (url.startsWith('http')) return url;
-    return `http://localhost:8080${url}`;
+    return `http://localhost:8082${url}`;
   };
 
   useEffect(() => {

@@ -8,108 +8,131 @@ import com.example.vgashop.dto.UserDTO;
 import com.example.vgashop.entity.Role;
 import com.example.vgashop.entity.User;
 import com.example.vgashop.entity.UserAddress;
-import com.example.vgashop.repository.UserRepository;
 import com.example.vgashop.exception.DuplicateResourceException;
 import com.example.vgashop.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
 import org.springframework.beans.factory.annotation.Autowired;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 public class UserService {
 
-    private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
     private EntityManager entityManager;
 
-    public UserService(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public UserService() {
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
-    // ==========================================
+    // Lấy user an toàn bằng Native SQL (tái sử dụng nội bộ)
+    private User getUserByUsernameNative(String username) {
+        try {
+            return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE username = :username AND deleted = false", User.class)
+                    .setParameter("username", username)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new RuntimeException("User not found");
+        }
+    }
 
-    // ==========================================
     public UserProfileResponse getUserProfile(String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getUserByUsernameNative(username);
         return mapToDtoProfile(user);
     }
 
     @Transactional
     public UserProfileResponse updateProfile(String username, UserProfileRequest request) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getUserByUsernameNative(username);
 
+        String sql = "UPDATE users SET username = :newUsername, phone = :phone, gender = :gender, dob = :dob WHERE id = :id";
+        entityManager.createNativeQuery(sql)
+                .setParameter("newUsername", request.getUsername())
+                .setParameter("phone", request.getPhone())
+                .setParameter("gender", request.getGender())
+                .setParameter("dob", request.getDob())
+                .setParameter("id", user.getId())
+                .executeUpdate();
+
+        // Cập nhật state hiện tại để map sang DTO mà không cần query lại
         user.setUsername(request.getUsername());
         user.setPhone(request.getPhone());
         user.setGender(request.getGender());
         user.setDob(request.getDob());
 
-        return mapToDtoProfile(userRepository.save(user));
+        return mapToDtoProfile(user);
     }
 
     @Transactional
     public void changePassword(String username, ChangePasswordRequest req) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getUserByUsernameNative(username);
 
         if (!passwordEncoder.matches(req.getOldPassword(), user.getPassword())) {
             throw new IllegalArgumentException("Mật khẩu cũ không đúng!");
         }
-
         if (passwordEncoder.matches(req.getNewPassword(), user.getPassword())) {
             throw new IllegalArgumentException("Mật khẩu mới không được trùng mật khẩu cũ!");
         }
 
-        user.setPassword(passwordEncoder.encode(req.getNewPassword()));
-        userRepository.save(user);
+        String sql = "UPDATE users SET password = :password WHERE id = :id";
+        entityManager.createNativeQuery(sql)
+                .setParameter("password", passwordEncoder.encode(req.getNewPassword()))
+                .setParameter("id", user.getId())
+                .executeUpdate();
     }
 
     @Transactional
     public UserProfileResponse addAddress(String username, UserAddressDto dto) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getUserByUsernameNative(username);
 
-        UserAddress address = new UserAddress();
-        address.setUser(user);
-        address.setRecipientName(dto.getRecipientName());
-        address.setPhone(dto.getPhone());
-        address.setDetailedAddress(dto.getDetailedAddress());
+        boolean isDefault = (dto.getIsDefault() != null && dto.getIsDefault()) || user.getAddresses().isEmpty();
 
-        // Address
-        if (dto.getIsDefault() != null && dto.getIsDefault() || user.getAddresses().isEmpty()) {
-            user.getAddresses().forEach(a -> a.setIsDefault(false));
-            address.setIsDefault(true);
-        } else {
-            address.setIsDefault(false);
+        if (isDefault) {
+            String updateOldDefaultSql = "UPDATE user_addresses SET is_default = false WHERE user_id = :userId";
+            entityManager.createNativeQuery(updateOldDefaultSql)
+                    .setParameter("userId", user.getId())
+                    .executeUpdate();
         }
 
-        user.getAddresses().add(address);
-        return mapToDtoProfile(userRepository.save(user));
+        String insertAddressSql = "INSERT INTO user_addresses (user_id, recipient_name, phone, detailed_address, is_default) " +
+                                  "VALUES (:userId, :recipientName, :phone, :detailedAddress, :isDefault)";
+        entityManager.createNativeQuery(insertAddressSql)
+                .setParameter("userId", user.getId())
+                .setParameter("recipientName", dto.getRecipientName())
+                .setParameter("phone", dto.getPhone())
+                .setParameter("detailedAddress", dto.getDetailedAddress())
+                .setParameter("isDefault", isDefault)
+                .executeUpdate();
+
+        // Tải lại user để có mảng addresses mới nhất
+        entityManager.refresh(user);
+        return mapToDtoProfile(user);
     }
 
     @Transactional
     public UserProfileResponse deleteAddress(String username, Long addressId) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getUserByUsernameNative(username);
 
-        user.getAddresses().removeIf(a -> a.getId().equals(addressId));
-        return mapToDtoProfile(userRepository.save(user));
+        String deleteAddressSql = "DELETE FROM user_addresses WHERE id = :addressId AND user_id = :userId";
+        entityManager.createNativeQuery(deleteAddressSql)
+                .setParameter("addressId", addressId)
+                .setParameter("userId", user.getId())
+                .executeUpdate();
+
+        entityManager.refresh(user);
+        return mapToDtoProfile(user);
     }
 
     private UserProfileResponse mapToDtoProfile(User user) {
@@ -117,7 +140,7 @@ public class UserService {
         dto.setId(user.getId());
         dto.setUsername(user.getUsername());
         dto.setEmail(user.getEmail());
-        dto.setRole(user.getRole().name());
+        if (user.getRole() != null) dto.setRole(user.getRole().name());
         dto.setPhone(user.getPhone());
         dto.setGender(user.getGender());
         dto.setDob(user.getDob());
@@ -132,25 +155,52 @@ public class UserService {
 
     // ==========================================
 
-    // ==========================================
-
+    @SuppressWarnings("unchecked")
     public Page<User> getAllUsers(int page, int size, String sortBy, String direction) {
-        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
-        return userRepository.findByDeletedFalse(pageable);
+        String countSql = "SELECT COUNT(*) FROM users WHERE deleted = false";
+        Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
+
+        String safeSort = sortBy.matches("^[a-zA-Z0-9_]+$") ? sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase() : "id";
+        String safeDir = direction.equalsIgnoreCase("desc") ? "DESC" : "ASC";
+        
+        String fetchSql = "SELECT * FROM users WHERE deleted = false ORDER BY " + safeSort + " " + safeDir + " LIMIT :limit OFFSET :offset";
+        
+        List<User> content = entityManager.createNativeQuery(fetchSql, User.class)
+                .setParameter("limit", size)
+                .setParameter("offset", page * size)
+                .getResultList();
+
+        return new PageImpl<>(content, PageRequest.of(page, size), total.longValue());
     }
 
+    @SuppressWarnings("unchecked")
     public Page<User> searchUsers(String keyWord, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("username").ascending()); // NOTE: "name" changed to "username"
-        if (keyWord == null || keyWord.trim().isEmpty()) {
-            return userRepository.findByDeletedFalse(pageable);
-        }
-        return userRepository.findByUsernameContainingIgnoreCaseOrEmailContainingIgnoreCase(keyWord.trim(), keyWord.trim(), pageable);
+        String searchParam = (keyWord == null || keyWord.trim().isEmpty()) ? "%" : "%" + keyWord.trim() + "%";
+
+        String countSql = "SELECT COUNT(*) FROM users WHERE deleted = false AND (LOWER(username) LIKE LOWER(:keyword) OR LOWER(email) LIKE LOWER(:keyword))";
+        Number total = (Number) entityManager.createNativeQuery(countSql)
+                .setParameter("keyword", searchParam)
+                .getSingleResult();
+
+        String fetchSql = "SELECT * FROM users WHERE deleted = false AND (LOWER(username) LIKE LOWER(:keyword) OR LOWER(email) LIKE LOWER(:keyword)) ORDER BY username ASC LIMIT :limit OFFSET :offset";
+        List<User> content = entityManager.createNativeQuery(fetchSql, User.class)
+                .setParameter("keyword", searchParam)
+                .setParameter("limit", size)
+                .setParameter("offset", page * size)
+                .getResultList();
+
+        return new PageImpl<>(content, PageRequest.of(page, size), total.longValue());
     }
 
     public User getUserById(Long id) {
-        return userRepository.findByIdAndDeleted(id, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với ID " + id));
+        String sql = "SELECT * FROM users WHERE id = :id AND deleted = false";
+        try {
+            return (User) entityManager.createNativeQuery(sql, User.class)
+                    .setParameter("id", id)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy người dùng với ID " + id);
+        }
     }
 
     public User getCurrentUser() {
@@ -158,145 +208,106 @@ public class UserService {
         if (username == null || username.trim().isEmpty()) {
             throw new ResourceNotFoundException("Không tìm thấy người dùng đang đăng nhập");
         }
-        return userRepository.findByUsernameAndDeletedFalse(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));
+        
+        String sql = "SELECT * FROM users WHERE username = :username AND deleted = false";
+        try {
+            return (User) entityManager.createNativeQuery(sql, User.class)
+                    .setParameter("username", username)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy người dùng: " + username);
+        }
     }
 
+    @Transactional
     public User createUser(UserDTO dto) {
-        if (userRepository.existsByUsername(dto.getUsername())) {
-            throw new DuplicateResourceException("Username '" + dto.getUsername() + "' đã tồn tại!");
-        }
-        if (userRepository.existsByEmail(dto.getEmail())) {
-            throw new DuplicateResourceException("Email '" + dto.getEmail() + "' đã tồn tại!");
-        }
+        Number userCount = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE username = :username")
+                .setParameter("username", dto.getUsername())
+                .getSingleResult();
+        if (userCount.intValue() > 0) throw new DuplicateResourceException("Username '" + dto.getUsername() + "' đã tồn tại!");
+        
+        Number emailCount = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE email = :email")
+                .setParameter("email", dto.getEmail())
+                .getSingleResult();
+        if (emailCount.intValue() > 0) throw new DuplicateResourceException("Email '" + dto.getEmail() + "' đã tồn tại!");
 
-        User user = new User();
-        user.setUsername(dto.getUsername());
-        user.setEmail(dto.getEmail());
-        user.setPassword(passwordEncoder.encode(dto.getPassword()));
-        user.setFullName(dto.getFullName());
-        user.setPhone(dto.getPhone());
-        user.setAddress(dto.getAddress());
-        user.setAvatar(dto.getAvatar());
-        user.setRole(dto.getRole() != null ? Role.valueOf(dto.getRole().toUpperCase()) : Role.USER);
+        String roleStr = dto.getRole() != null ? dto.getRole().toUpperCase() : "USER";
 
-        return userRepository.save(user);
+        String insertSql = "INSERT INTO users (username, email, password, full_name, phone, address, avatar, role, deleted, status) " +
+                           "VALUES (:username, :email, :password, :fullName, :phone, :address, :avatar, :role, false, true)";
+                           
+        entityManager.createNativeQuery(insertSql)
+                .setParameter("username", dto.getUsername())
+                .setParameter("email", dto.getEmail())
+                .setParameter("password", passwordEncoder.encode(dto.getPassword()))
+                .setParameter("fullName", dto.getFullName())
+                .setParameter("phone", dto.getPhone())
+                .setParameter("address", dto.getAddress())
+                .setParameter("avatar", dto.getAvatar())
+                .setParameter("role", roleStr)
+                .executeUpdate();
+
+        return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE username = :username", User.class)
+                .setParameter("username", dto.getUsername())
+                .getSingleResult();
     }
 
+    @Transactional
+    @SuppressWarnings("unchecked")
     public User updateUser(Long id, UserDTO dto) {
-        return userRepository.findByIdAndDeleted(id, false)
-                .map(user -> {
-                    if (!user.getUsername().equals(dto.getUsername()) && userRepository.existsByUsername(dto.getUsername())) {
-                        throw new DuplicateResourceException("UserName '" + dto.getUsername() + "' đã tồn tại!");
-                    }
-                    if (!user.getEmail().equals(dto.getEmail()) && userRepository.existsByEmail(dto.getEmail())) {
-                        throw new DuplicateResourceException("Email '" + dto.getEmail() + "' đã tồn tại!");
-                    }
+        List<User> existingUsers = entityManager.createNativeQuery("SELECT * FROM users WHERE id = :id AND deleted = false", User.class)
+                .setParameter("id", id)
+                .getResultList();
+                
+        if (existingUsers.isEmpty()) {
+            throw new ResourceNotFoundException("Không tìm thấy người dùng với ID " + id);
+        }
+        User user = existingUsers.get(0);
 
-                    user.setUsername(dto.getUsername());
-                    user.setEmail(dto.getEmail());
-                    user.setFullName(dto.getFullName());
-                    user.setPhone(dto.getPhone());
-                    user.setAddress(dto.getAddress());
-                    user.setAvatar(dto.getAvatar());
-                    if (dto.getRole() != null) {
-                        user.setRole(Role.valueOf(dto.getRole().toUpperCase()));
-                    }
+        if (!user.getUsername().equals(dto.getUsername())) {
+            Number uCount = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE username = :username").setParameter("username", dto.getUsername()).getSingleResult();
+            if (uCount.intValue() > 0) throw new DuplicateResourceException("UserName '" + dto.getUsername() + "' đã tồn tại!");
+        }
+        if (!user.getEmail().equals(dto.getEmail())) {
+            Number eCount = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE email = :email").setParameter("email", dto.getEmail()).getSingleResult();
+            if (eCount.intValue() > 0) throw new DuplicateResourceException("Email '" + dto.getEmail() + "' đã tồn tại!");
+        }
 
-                    return userRepository.save(user);
-                })
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với ID " + id));
+        String roleStr = dto.getRole() != null ? dto.getRole().toUpperCase() : (user.getRole() != null ? user.getRole().name() : "USER");
+
+        String updateSql = "UPDATE users SET username = :username, email = :email, full_name = :fullName, " +
+                           "phone = :phone, address = :address, avatar = :avatar, role = :role WHERE id = :id";
+                           
+        entityManager.createNativeQuery(updateSql)
+                .setParameter("username", dto.getUsername())
+                .setParameter("email", dto.getEmail())
+                .setParameter("fullName", dto.getFullName())
+                .setParameter("phone", dto.getPhone())
+                .setParameter("address", dto.getAddress())
+                .setParameter("avatar", dto.getAvatar())
+                .setParameter("role", roleStr)
+                .setParameter("id", id)
+                .executeUpdate();
+
+        return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE id = :id", User.class)
+                .setParameter("id", id)
+                .getSingleResult();
     }
 
+    @Transactional
     public void deleteUser(Long id) {
-        if (!userRepository.existsByIdAndDeleted(id, false)) {
+        String checkSql = "SELECT COUNT(*) FROM users WHERE id = :id AND deleted = false";
+        Number count = (Number) entityManager.createNativeQuery(checkSql)
+                .setParameter("id", id)
+                .getSingleResult();
+        
+        if (count.intValue() == 0) {
             throw new ResourceNotFoundException("Không tìm thấy người dùng với ID " + id);
         }
 
-        User user = userRepository.findByIdAndDeleted(id, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với ID " + id));
-        user.setDeleted(true);
-        userRepository.save(user);
-    }
-
-    // ============================================================
-    // [OWASP A03] Các method SQL Injection – chỉ dùng đào tạo bảo mật
-    // ============================================================
-
-    /**
-     * Lấy thông tin của người dùng theo username bằng native SQL nối chuỗi.
-     * Payload dump toàn bộ user: username = ' OR '1'='1
-     * Payload lấy user cụ thể: username = admin' OR '1'='1' AND username='victim
-     * Payload UNION: username = ' UNION SELECT id,username,password,full_name,email,address,avatar,role,status,deleted,created_at,updated_at,phone,gender,dob FROM users--
-     */
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> getUserInfoVulnerable(String username) {
-        // Cố ý nối chuỗi username vào SQL → SQL Injection
-        String sql = "SELECT id, username, email, full_name, phone, role, status, created_at "
-                   + "FROM users WHERE username = '" + username + "'";
-        List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
-        List<Map<String, Object>> result = new java.util.ArrayList<>();
-        for (Object[] row : rows) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id",         row[0]);
-            map.put("username",   row[1]);
-            map.put("email",      row[2]);
-            map.put("full_name",  row[3]);
-            map.put("phone",      row[4]);
-            map.put("role",       row[5]);
-            map.put("status",     row[6]);
-            map.put("created_at", row[7]);
-            result.add(map);
-        }
-        return result;
-    }
-
-    /**
-     * Lấy danh sách tài khoản ADMIN bằng native SQL nối chuỗi.
-     * Payload leo thậng quyền: role = 'USER' OR '1'='1
-     * Payload UNION dump password: role = 'ADMIN' UNION SELECT id,username,password,email,5,6,7,8 FROM users--
-     */
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> getAdminListVulnerable(String role) {
-        // Cố ý nối chuỗi role vào SQL → SQL Injection
-        String sql = "SELECT id, username, email, full_name, role, status, created_at "
-                   + "FROM users WHERE role = '" + role + "' AND deleted = false";
-        List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
-        List<Map<String, Object>> result = new java.util.ArrayList<>();
-        for (Object[] row : rows) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id",         row[0]);
-            map.put("username",   row[1]);
-            map.put("email",      row[2]);
-            map.put("full_name",  row[3]);
-            map.put("role",       row[4]);
-            map.put("status",     row[5]);
-            map.put("created_at", row[6]);
-            result.add(map);
-        }
-        return result;
-    }
-
-    /**
-     * Thống kê tài khoản theo trạng thái (active/inactive) bằng native SQL nối chuỗi.
-     * Payload Boolean-based blind: status = '1' AND SLEEP(5)--  (MySQL time-based)
-     * Payload dump dữ liệu: status = '1' UNION SELECT count(*),username,password,4,5,6,7 FROM users--
-     */
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> getAccountStatsByStatusVulnerable(String status) {
-        // Cố ý nối chuỗi status vào SQL → SQL Injection (Boolean-based + Time-based Blind)
-        String sql = "SELECT role, COUNT(*) as total, SUM(CASE WHEN status = true THEN 1 ELSE 0 END) as active_count "
-                   + "FROM users WHERE deleted = false AND status = " + status
-                   + " GROUP BY role";
-        List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
-        List<Map<String, Object>> result = new java.util.ArrayList<>();
-        for (Object[] row : rows) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("role",         row[0]);
-            map.put("total",        row[1]);
-            map.put("active_count", row[2]);
-            result.add(map);
-        }
-        return result;
+        String updateSql = "UPDATE users SET deleted = true WHERE id = :id";
+        entityManager.createNativeQuery(updateSql)
+                .setParameter("id", id)
+                .executeUpdate();
     }
 }

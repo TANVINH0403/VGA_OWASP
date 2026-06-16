@@ -2,93 +2,111 @@ package com.example.vgashop.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import com.example.vgashop.dto.AdminDashboardResponse;
-import com.example.vgashop.repository.BrandRepository;
-import com.example.vgashop.repository.CategoryRepository;
-import com.example.vgashop.repository.OrderRepository;
-import com.example.vgashop.repository.PaymentRepository;
-import com.example.vgashop.repository.ProductRepository;
-import com.example.vgashop.repository.UserRepository;
-import com.example.vgashop.repository.BlogRepository;
-
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-
-import com.example.vgashop.dto.OrderItemResponse;
-import com.example.vgashop.dto.OrderResponse;
-import com.example.vgashop.dto.OrderStatusUpdateRequest;
-import com.example.vgashop.dto.OrderSummaryResponse;
-import com.example.vgashop.dto.ProductAdminResponse;
-import com.example.vgashop.dto.UserAdminResponse;
-import com.example.vgashop.dto.BlogDTO;
-import com.example.vgashop.entity.Category;
-import com.example.vgashop.entity.Role;
-import com.example.vgashop.entity.User;
-import com.example.vgashop.entity.Blog;
-import org.springframework.web.multipart.MultipartFile;
+import java.util.Date;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.Files;
-import java.util.Date;
-import com.example.vgashop.entity.Role;
-import com.example.vgashop.entity.User;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
+
+import com.example.vgashop.dto.*;
+import com.example.vgashop.entity.*;
 import com.example.vgashop.exception.ResourceNotFoundException;
-import com.example.vgashop.entity.Order;
-import com.example.vgashop.entity.OrderItem;
-import com.example.vgashop.entity.OrderStatus;
-import com.example.vgashop.entity.PaymentStatus;
-import com.example.vgashop.entity.Product;
-import com.example.vgashop.entity.Brand;
 
 @Service
 public class AdminService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AdminService.class);
 
-    private final UserRepository userRepository;
-    private final OrderRepository orderRepository;
-    private final ProductRepository productRepository;
-    private final CategoryRepository categoryRepository;
-    private final BrandRepository brandRepository;
-    private final PaymentRepository paymentRepository;
-    private final BlogRepository blogRepository;
+    @Autowired
+    private EntityManager entityManager;
 
-    // Constructor injection
-    public AdminService(BrandRepository brandRepository, CategoryRepository categoryRepository,
-            OrderRepository orderRepository, PaymentRepository paymentRepository, ProductRepository productRepository,
-            UserRepository userRepository, BlogRepository blogRepository) {
-        this.brandRepository = brandRepository;
-        this.categoryRepository = categoryRepository;
-        this.orderRepository = orderRepository;
-        this.paymentRepository = paymentRepository;
-        this.productRepository = productRepository;
-        this.userRepository = userRepository;
-        this.blogRepository = blogRepository;
+    public AdminService() {}
+
+    // Lấy user bằng Native SQL
+    private User getUserByIdNative(Long id) {
+        try {
+            return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE id = :id AND deleted = false", User.class)
+                    .setParameter("id", id)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy user với ID: " + id);
+        }
+    }
+
+    private Order getOrderByIdNative(Long id) {
+        try {
+            return (Order) entityManager.createNativeQuery("SELECT * FROM orders WHERE id = :id AND deleted = false", Order.class)
+                    .setParameter("id", id)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy đơn hàng");
+        }
+    }
+
+    private Product getProductByIdNative(Long id) {
+        try {
+            return (Product) entityManager.createNativeQuery("SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE id = :id AND deleted = false", Product.class)
+                    .setParameter("id", id)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy sản phẩm");
+        }
+    }
+
+    private Category getCategoryByIdNative(Long id) {
+        try {
+            return (Category) entityManager.createNativeQuery("SELECT * FROM categories WHERE id = :id AND deleted = false", Category.class)
+                    .setParameter("id", id)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy danh mục");
+        }
+    }
+
+    private Brand getBrandByIdNative(Long id) {
+        try {
+            return (Brand) entityManager.createNativeQuery("SELECT * FROM brands WHERE id = :id AND deleted = false", Brand.class)
+                    .setParameter("id", id)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy thương hiệu");
+        }
+    }
+
+    private Blog getBlogByIdNative(Long id) {
+        try {
+            return (Blog) entityManager.createNativeQuery("SELECT * FROM blogs WHERE id = :id AND deleted = false", Blog.class)
+                    .setParameter("id", id)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            throw new ResourceNotFoundException("Không tìm thấy bài viết");
+        }
     }
 
     // Dashboard
+    @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public AdminDashboardResponse getDashboard() {
-        log.info("Admin đang lấy dữ liệu dashboard");
+        log.info("Admin đang lấy dữ liệu dashboard (Native SQL)");
 
         LocalDateTime startOfToday = LocalDate.now().atStartOfDay();
 
-        // Retrieve all
-        List<Order> allOrders = orderRepository.findAll().stream()
-                .filter(o -> !o.isDeleted())
-                .collect(Collectors.toList());
+        List<Order> allOrders = entityManager.createNativeQuery("SELECT * FROM orders WHERE deleted = false", Order.class).getResultList();
 
         long totalOrders = 0;
         long todayOrders = 0;
@@ -96,13 +114,11 @@ public class AdminService {
         BigDecimal todayRevenue = BigDecimal.ZERO;
 
         for (Order o : allOrders) {
-            // Order
             if (o.getStatus() != OrderStatus.CANCELLED && o.getStatus() != OrderStatus.CANCEL_REQUESTED) {
                 totalOrders++;
                 BigDecimal amt = o.getTotalAmount() != null ? o.getTotalAmount() : BigDecimal.ZERO;
                 totalRevenue = totalRevenue.add(amt);
 
-                // Order
                 if (o.getCreatedAt() != null && !o.getCreatedAt().isBefore(startOfToday)) {
                     todayOrders++;
                     todayRevenue = todayRevenue.add(amt);
@@ -110,105 +126,132 @@ public class AdminService {
             }
         }
 
-        Long totalUsers = userRepository.countByDeletedFalse();
-        Long totalProducts = productRepository.countByDeletedFalse();
+        Number totalUsers = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE deleted = false").getSingleResult();
+        Number totalProducts = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM products WHERE deleted = false").getSingleResult();
 
-        // Error handling
         Long lowStockProducts = 0L;
         try {
-            lowStockProducts = productRepository.countLowStock(10);
+            Number countLowStock = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM products WHERE deleted = false AND stock <= :stockLimit")
+                    .setParameter("stockLimit", 10)
+                    .getSingleResult();
+            lowStockProducts = countLowStock.longValue();
         } catch (Exception e) {
             log.warn("Lỗi đếm hàng tồn kho: {}", e.getMessage());
         }
 
         return new AdminDashboardResponse(
-                totalUsers != null ? totalUsers : 0L,
+                totalUsers != null ? totalUsers.longValue() : 0L,
                 totalOrders,
                 todayOrders,
                 totalRevenue,
                 todayRevenue,
-                totalProducts != null ? totalProducts : 0L,
+                totalProducts != null ? totalProducts.longValue() : 0L,
                 lowStockProducts,
                 LocalDateTime.now());
     }
 
     // User
+    @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public Page<UserAdminResponse> getAllUsers(int page, int size, String sortBy, String direction, String search, String roleStr) {
         log.info("Admin lấy danh sách user - search: {}, role: {}", search, roleStr);
 
-        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
+        String safeSort = sortBy.matches("^[a-zA-Z0-9_]+$") ? sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase() : "id";
+        String safeDir = direction.equalsIgnoreCase("desc") ? "DESC" : "ASC";
         
-        Role roleObj = null;
+        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM users WHERE deleted = false");
+        StringBuilder fetchSql = new StringBuilder("SELECT * FROM users WHERE deleted = false");
+        
+        if (search != null && !search.trim().isEmpty()) {
+            countSql.append(" AND (LOWER(username) LIKE LOWER(:search) OR LOWER(email) LIKE LOWER(:search))");
+            fetchSql.append(" AND (LOWER(username) LIKE LOWER(:search) OR LOWER(email) LIKE LOWER(:search))");
+        }
+        
+        if (roleStr != null && !roleStr.trim().isEmpty()) {
+            countSql.append(" AND role = :role");
+            fetchSql.append(" AND role = :role");
+        }
+        
+        fetchSql.append(" ORDER BY ").append(safeSort).append(" ").append(safeDir).append(" LIMIT :limit OFFSET :offset");
+
+        var countQuery = entityManager.createNativeQuery(countSql.toString());
+        var fetchQuery = entityManager.createNativeQuery(fetchSql.toString(), User.class);
+
+        if (search != null && !search.trim().isEmpty()) {
+            countQuery.setParameter("search", "%" + search.trim() + "%");
+            fetchQuery.setParameter("search", "%" + search.trim() + "%");
+        }
+        
         if (roleStr != null && !roleStr.trim().isEmpty()) {
             try {
-                roleObj = Role.valueOf(roleStr.toUpperCase());
+                Role roleObj = Role.valueOf(roleStr.toUpperCase());
+                countQuery.setParameter("role", roleObj.name());
+                fetchQuery.setParameter("role", roleObj.name());
             } catch (Exception e) {
-                log.warn("Lọc role không tồn tại: {}", roleStr);
+                // Ignore invalid role
             }
         }
         
-        String querySearch = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
-        Page<User> users = userRepository.searchActiveUsers(querySearch, roleObj, pageable);
+        fetchQuery.setParameter("limit", size);
+        fetchQuery.setParameter("offset", page * size);
 
-        Page<UserAdminResponse> result = users.map(user -> new UserAdminResponse(
-                user.getId(),
-                user.getUsername(),
-                user.getEmail(),
-                user.getFullName(),
-                user.getPhone(),
-                user.getRole(),
-                user.getStatus(),
-                user.isDeleted(),
-                user.getCreatedAt(),
-                user.getUpdatedAt()));
+        Number total = (Number) countQuery.getSingleResult();
+        List<User> users = fetchQuery.getResultList();
 
-        log.info("Trả về {} users cho Admin", result.getTotalElements());
-        return result;
+        List<UserAdminResponse> content = users.stream().map(user -> new UserAdminResponse(
+                user.getId(), user.getUsername(), user.getEmail(), user.getFullName(),
+                user.getPhone(), user.getRole(), user.getStatus(), user.isDeleted(),
+                user.getCreatedAt(), user.getUpdatedAt())).collect(Collectors.toList());
+
+        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        return new PageImpl<>(content, PageRequest.of(page, size, sort), total.longValue());
     }
-
 
     @Transactional
     public UserAdminResponse createUser(com.example.vgashop.dto.UserDTO dto) {
         log.info("Admin tạo user mới: {}", dto.getUsername());
 
-        if (userRepository.existsByUsername(dto.getUsername())) {
-            throw new com.example.vgashop.exception.DuplicateResourceException("Username đã tồn tại!");
-        }
-        if (userRepository.existsByEmail(dto.getEmail())) {
-            throw new com.example.vgashop.exception.DuplicateResourceException("Email đã tồn tại!");
-        }
-
-        User user = new User();
-        user.setUsername(dto.getUsername());
-        user.setEmail(dto.getEmail());
+        Number countUsername = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE username = :username")
+                .setParameter("username", dto.getUsername()).getSingleResult();
+        if (countUsername.intValue() > 0) throw new com.example.vgashop.exception.DuplicateResourceException("Username đã tồn tại!");
         
+        Number countEmail = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE email = :email")
+                .setParameter("email", dto.getEmail()).getSingleResult();
+        if (countEmail.intValue() > 0) throw new com.example.vgashop.exception.DuplicateResourceException("Email đã tồn tại!");
+
+        String roleStr = dto.getRole() != null ? dto.getRole().toUpperCase() : "USER";
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        user.setPassword(encoder.encode(dto.getPassword()));
-        
-        user.setFullName(dto.getFullName());
-        user.setRole(dto.getRole() != null ? Role.valueOf(dto.getRole().toUpperCase()) : Role.USER);
-        user.setStatus(true);
+        String encPass = encoder.encode(dto.getPassword());
 
-        User saved = userRepository.save(user);
+        String insertSql = "INSERT INTO users (username, email, password, full_name, role, status, deleted, created_at, updated_at) " +
+                           "VALUES (:username, :email, :password, :fullName, :role, true, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+                           
+        entityManager.createNativeQuery(insertSql)
+                .setParameter("username", dto.getUsername())
+                .setParameter("email", dto.getEmail())
+                .setParameter("password", encPass)
+                .setParameter("fullName", dto.getFullName())
+                .setParameter("role", roleStr)
+                .executeUpdate();
+
+        User saved = (User) entityManager.createNativeQuery("SELECT * FROM users WHERE username = :username", User.class)
+                .setParameter("username", dto.getUsername()).getSingleResult();
         
         return new UserAdminResponse(saved.getId(), saved.getUsername(), saved.getEmail(), 
                                      saved.getFullName(), saved.getPhone(), saved.getRole(), 
                                      saved.getStatus(), saved.isDeleted(), saved.getCreatedAt(), saved.getUpdatedAt());
     }
 
-
     @Transactional
     public void changeUserRole(Long userId, String newRole) {
         log.info("Admin thay đổi role userId={} thành {}", userId, newRole);
-
-        User user = userRepository.findByIdAndDeleted(userId, false)
-                .orElseThrow(() -> new ResourceNotFoundException("KHông tìm thấy người dùng với ID: " + userId));
-
+        User user = getUserByIdNative(userId); // checks existence
         try {
-            user.setRole(Role.valueOf(newRole.toUpperCase()));
-            userRepository.save(user);
+            Role.valueOf(newRole.toUpperCase());
+            entityManager.createNativeQuery("UPDATE users SET role = :role, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
+                    .setParameter("role", newRole.toUpperCase())
+                    .setParameter("id", userId)
+                    .executeUpdate();
             log.info("Đã thay đổi role userId={} thành {}", userId, newRole);
         } catch (IllegalArgumentException e) {
             log.error("Role không hợp lệ: {}", newRole);
@@ -216,160 +259,184 @@ public class AdminService {
         }
     }
 
-    // Status
     @Transactional
     public void toggleUserStatus(Long userId, String currentAdminUsername) {
         log.info("Admin '{}' toggle status userId={}", currentAdminUsername, userId);
+        User user = getUserByIdNative(userId);
 
-        User user = userRepository.findByIdAndDeleted(userId, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy user với ID:" + userId));
-
-        // Guard 1: Không thể tự khóa chính mình
-        if (user.getUsername().equals(currentAdminUsername)) {
-            throw new IllegalStateException("Không thể khóa tài khoản đang đăng nhập!");
-        }
-
-        // Guard 2: Không thể khóa tài khoản ADMIN khác
-        if (user.getRole() == Role.ADMIN) {
-            throw new IllegalStateException("Không thể khóa tài khoản Quản trị viên!");
-        }
+        if (user.getUsername().equals(currentAdminUsername)) throw new IllegalStateException("Không thể khóa tài khoản đang đăng nhập!");
+        if (user.getRole() == Role.ADMIN) throw new IllegalStateException("Không thể khóa tài khoản Quản trị viên!");
 
         boolean newStatus = !user.getStatus();
-        user.setStatus(newStatus);
-        userRepository.save(user);
-
-        log.info("Đã thay đổi status userId={} thành {} bởi admin '{}'", userId, newStatus, currentAdminUsername);
+        entityManager.createNativeQuery("UPDATE users SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
+                .setParameter("status", newStatus)
+                .setParameter("id", userId)
+                .executeUpdate();
     }
 
-    // Delete (soft)
     @Transactional
     public void softDeleteUser(Long userId, String currentAdminUsername) {
         log.info("Admin '{}' xóa mềm userId={}", currentAdminUsername, userId);
-        User user = userRepository.findByIdAndDeleted(userId, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy user với ID:" + userId));
+        User user = getUserByIdNative(userId);
 
-        // Guard 1: Không thể tự xóa chính mình
-        if (user.getUsername().equals(currentAdminUsername)) {
-            throw new IllegalStateException("Không thể xóa tài khoản đang đăng nhập!");
-        }
+        if (user.getUsername().equals(currentAdminUsername)) throw new IllegalStateException("Không thể xóa tài khoản đang đăng nhập!");
+        if (user.getRole() == Role.ADMIN) throw new IllegalStateException("Không thể xóa tài khoản Quản trị viên!");
 
-        // Guard 2: Không thể xóa tài khoản ADMIN khác
-        if (user.getRole() == Role.ADMIN) {
-            throw new IllegalStateException("Không thể xóa tài khoản Quản trị viên!");
-        }
-
-        user.setDeleted(true);
-        userRepository.save(user);
-        log.info("Đã xóa mềm (deleted=true) userId={} bởi admin '{}'", userId, currentAdminUsername);
+        entityManager.createNativeQuery("UPDATE users SET deleted = true, updated_at = CURRENT_TIMESTAMP WHERE id = :id")
+                .setParameter("id", userId)
+                .executeUpdate();
     }
 
-
+    @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public Page<OrderSummaryResponse> getAllOrders(int page, int size, String sortBy, String direction, String status) {
         log.info("Admin lấy danh sách tất cả đơn hàng - page: {}, status: {}", page, status);
 
-        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
-
-        Page<Order> orders;
+        String safeSort = sortBy.matches("^[a-zA-Z0-9_]+$") ? sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase() : "id";
+        String safeDir = direction.equalsIgnoreCase("desc") ? "DESC" : "ASC";
+        
+        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM orders WHERE deleted = false");
+        StringBuilder fetchSql = new StringBuilder("SELECT * FROM orders WHERE deleted = false");
+        
         if (status != null && !status.isBlank()) {
             try {
                 OrderStatus orderStatus = OrderStatus.valueOf(status.toUpperCase());
-                orders = orderRepository.findByStatusAndDeletedFalse(orderStatus, pageable);
+                countSql.append(" AND status = :status");
+                fetchSql.append(" AND status = :status");
             } catch (IllegalArgumentException e) {
-                orders = orderRepository.findByDeletedFalse(pageable);
+                // ignore
             }
-        } else {
-            orders = orderRepository.findByDeletedFalse(pageable);
         }
+        
+        fetchSql.append(" ORDER BY ").append(safeSort).append(" ").append(safeDir).append(" LIMIT :limit OFFSET :offset");
 
-        Page<OrderSummaryResponse> result = orders.map(this::convertToOrderSummary);
-        log.info("Trả về {} đơn hàng cho Admin", result.getTotalElements());
-        return result;
+        var countQuery = entityManager.createNativeQuery(countSql.toString());
+        var fetchQuery = entityManager.createNativeQuery(fetchSql.toString(), Order.class);
+
+        if (status != null && !status.isBlank()) {
+            try {
+                OrderStatus orderStatus = OrderStatus.valueOf(status.toUpperCase());
+                countQuery.setParameter("status", orderStatus.name());
+                fetchQuery.setParameter("status", orderStatus.name());
+            } catch (IllegalArgumentException e) {
+                // ignore
+            }
+        }
+        
+        fetchQuery.setParameter("limit", size);
+        fetchQuery.setParameter("offset", page * size);
+
+        Number total = (Number) countQuery.getSingleResult();
+        List<Order> orders = fetchQuery.getResultList();
+
+        List<OrderSummaryResponse> content = orders.stream().map(this::convertToOrderSummary).collect(Collectors.toList());
+
+        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
+        return new PageImpl<>(content, PageRequest.of(page, size, sort), total.longValue());
     }
 
-    // Update existing
     @Transactional
     public OrderResponse updateOrderStatus(Long orderId, OrderStatusUpdateRequest request) {
         log.info("Admin cập nhật trạng thái đơn hàng {} thành {}", orderId, request.getStatus());
+        Order order = getOrderByIdNative(orderId);
 
-        Order order = orderRepository.findByIdAndDeletedFalse(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng"));
-
-        order.setStatus(request.getStatus());
-
+        String updateSql = "UPDATE orders SET status = :status";
+        
         switch (request.getStatus()) {
-            case CONFIRMED -> order.setConfirmedAt(LocalDateTime.now());
-            case SHIPPING -> order.setShippedAt(LocalDateTime.now());
-            case DELIVERED -> order.setDeliveredAt(LocalDateTime.now());
+            case CONFIRMED -> updateSql += ", confirmed_at = CURRENT_TIMESTAMP";
+            case SHIPPING -> updateSql += ", shipped_at = CURRENT_TIMESTAMP";
+            case DELIVERED -> updateSql += ", delivered_at = CURRENT_TIMESTAMP";
+            default -> {}
         }
+        updateSql += " WHERE id = :id";
+        
+        entityManager.createNativeQuery(updateSql)
+                .setParameter("status", request.getStatus().name())
+                .setParameter("id", orderId)
+                .executeUpdate();
 
-        Order savedOrder = orderRepository.save(order);
-        log.info("Đã cập nhật trạng thái đơn hàng {} thành {}", orderId, request.getStatus());
-
-        return convertToOrderResponse(savedOrder);
+        entityManager.refresh(order);
+        return convertToOrderResponse(order);
     }
 
-
+    @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public Page<ProductAdminResponse> getAllProductForAdmin(int page, int size, String search) {
-        log.info("Admin lấy danh sách sản phẩm - page: {}, search: {}", page, search);
-
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "displayOrder").and(Sort.by(Sort.Direction.DESC, "id")));
+        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM products WHERE deleted = false");
+        StringBuilder fetchSql = new StringBuilder("SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE deleted = false");
         
-        Page<Product> products;
         if (search != null && !search.trim().isEmpty()) {
-            products = productRepository.searchAdminProducts(search.trim(), pageable);
-        } else {
-            products = productRepository.findByDeletedFalse(pageable);
+            countSql.append(" AND LOWER(name) LIKE LOWER(:search)");
+            fetchSql.append(" AND LOWER(name) LIKE LOWER(:search)");
         }
+        
+        fetchSql.append(" ORDER BY display_order ASC, id DESC LIMIT :limit OFFSET :offset");
 
-        Page<ProductAdminResponse> result = products.map(p -> new ProductAdminResponse(
-                p.getId(),
-                p.getName(),
-                p.getPrice(),
-                p.getStock(),
+        var countQuery = entityManager.createNativeQuery(countSql.toString());
+        var fetchQuery = entityManager.createNativeQuery(fetchSql.toString(), Product.class);
+
+        if (search != null && !search.trim().isEmpty()) {
+            countQuery.setParameter("search", "%" + search.trim() + "%");
+            fetchQuery.setParameter("search", "%" + search.trim() + "%");
+        }
+        
+        fetchQuery.setParameter("limit", size);
+        fetchQuery.setParameter("offset", page * size);
+
+        Number total = (Number) countQuery.getSingleResult();
+        List<Product> products = fetchQuery.getResultList();
+
+        List<ProductAdminResponse> content = products.stream().map(p -> new ProductAdminResponse(
+                p.getId(), p.getName(), p.getPrice(), p.getStock(),
                 p.getBrand() != null ? p.getBrand().getName() : "N/A",
                 p.getCategory() != null ? p.getCategory().getName() : "N/A",
-                p.getStatus(),
-                p.getImgUrl() != null ? p.getImgUrl() : ""));
+                p.getStatus(), p.getImgUrl() != null ? p.getImgUrl() : "")).collect(Collectors.toList());
 
-        log.info("Trả về {} sản phẩm cho Admin", result.getTotalElements());
-        return result;
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "displayOrder").and(Sort.by(Sort.Direction.DESC, "id")));
+        return new PageImpl<>(content, pageable, total.longValue());
     }
 
-    // Update existing
     @Transactional
     public void updateProductStock(Long productId, Integer stock) {
         log.info("Admin cập nhật stock sản phẩm {} thành {}", productId, stock);
+        getProductByIdNative(productId);
 
-        Product products = productRepository.findByIdAndDeletedFalse(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm"));
+        if (stock < 0) throw new IllegalArgumentException("Stock không được âm");
 
-        if (stock < 0) {
-            log.warn("Stock âm không hợp lệ: {}", stock);
-            throw new IllegalArgumentException("Stock không được âm");
-        }
-
-        products.setStock(stock);
-        productRepository.save(products);
-
-        log.info("Đã cập nhật stock sản phẩm {} thành {}", productId, stock);
+        entityManager.createNativeQuery("UPDATE products SET stock = :stock WHERE id = :id")
+                .setParameter("stock", stock)
+                .setParameter("id", productId)
+                .executeUpdate();
     }
 
-
+    @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public Page<Category> getAllCategoriesForAdmin(int page, int size) {
-        log.info("Admin lấy danh sách category - page: {}", page);
+        String countSql = "SELECT COUNT(*) FROM categories WHERE deleted = false";
+        Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
+        
+        String fetchSql = "SELECT * FROM categories WHERE deleted = false ORDER BY display_order ASC, id ASC LIMIT :limit OFFSET :offset";
+        List<Category> content = entityManager.createNativeQuery(fetchSql, Category.class)
+                .setParameter("limit", size)
+                .setParameter("offset", page * size).getResultList();
+
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "displayOrder").and(Sort.by(Sort.Direction.ASC, "id")));
-        return categoryRepository.findByDeletedFalse(pageable);
+        return new PageImpl<>(content, pageable, total.longValue());
     }
 
+    @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public Page<Brand> getAllBrandsForAdmin(int page, int size) {
-        log.info("Admin lấy danh sách brand - page: {}", page);
+        String countSql = "SELECT COUNT(*) FROM brands WHERE deleted = false";
+        Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
+        
+        String fetchSql = "SELECT * FROM brands WHERE deleted = false ORDER BY display_order ASC, id ASC LIMIT :limit OFFSET :offset";
+        List<Brand> content = entityManager.createNativeQuery(fetchSql, Brand.class)
+                .setParameter("limit", size)
+                .setParameter("offset", page * size).getResultList();
+
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "displayOrder").and(Sort.by(Sort.Direction.ASC, "id")));
-        return brandRepository.findByDeletedFalse(pageable);
+        return new PageImpl<>(content, pageable, total.longValue());
     }
 
     // CONVERT METHODS
@@ -379,56 +446,37 @@ public class AdminService {
                 .mapToInt(OrderItem::getQuantity)
                 .sum();
 
-
-
         return new OrderSummaryResponse(
-                order.getId(),
-                order.getOrderCode(),
-                order.getFullName(),
-                order.getPhone(),
-                order.getTotalAmount(),
-                order.getStatus(),
-                order.getPaymentStatus(),
-                order.getCreatedAt(),
-                totalItems);
+                order.getId(), order.getOrderCode(), order.getFullName(), order.getPhone(),
+                order.getTotalAmount(), order.getStatus(), order.getPaymentStatus(),
+                order.getCreatedAt(), totalItems);
     }
 
     private OrderResponse convertToOrderResponse(Order order) {
         List<OrderItemResponse> itemResponses = order.getItems().stream()
                 .filter(item -> !item.isDeleted())
                 .map(item -> new OrderItemResponse(
-                        item.getProduct().getId(),
-                        item.getProduct().getName(),
-                        item.getProduct().getImgUrl(),
-                        item.getPrice(),
-                        item.getQuantity(),
-                        item.getSubtotal()))
+                        item.getProduct().getId(), item.getProduct().getName(), item.getProduct().getImgUrl(),
+                        item.getPrice(), item.getQuantity(), item.getSubtotal()))
                 .collect(Collectors.toList());
 
         String paymentMethodStr = "Chưa rõ";
         try {
-            com.example.vgashop.entity.Payment payment = paymentRepository.findFirstByOrder_IdAndDeletedFalseOrderByIdDesc(order.getId()).orElse(null);
+            Payment payment = (Payment) entityManager.createNativeQuery("SELECT * FROM payments WHERE order_id = :orderId AND deleted = false ORDER BY id DESC LIMIT 1", Payment.class)
+                    .setParameter("orderId", order.getId()).getSingleResult();
             if (payment != null && payment.getPaymentMethod() != null) {
                 paymentMethodStr = payment.getPaymentMethod().name();
             }
-        } catch (Exception e) {
-            log.warn("Không lấy được paymentMethod cho order {}: {}", order.getId(), e.getMessage());
+        } catch (NoResultException e) {
+            // Ignore
         }
 
         return new OrderResponse(
-                order.getId(),
-                order.getOrderCode(),
-                order.getTotalAmount(),
+                order.getId(), order.getOrderCode(), order.getTotalAmount(),
                 order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO,
-                order.getStatus(),
-                order.getPaymentStatus(),
-                order.getShippingAddress(),
-                order.getPhone(),
-                order.getNote() != null ? order.getNote() : "",
-                order.getCreatedAt(),
-                order.getConfirmedAt(),
-                order.getShippedAt(),
-                order.getDeliveredAt(),
+                order.getStatus(), order.getPaymentStatus(), order.getShippingAddress(),
+                order.getPhone(), order.getNote() != null ? order.getNote() : "",
+                order.getCreatedAt(), order.getConfirmedAt(), order.getShippedAt(), order.getDeliveredAt(),
                 itemResponses,
                 order.getFullName() != null && !order.getFullName().trim().isEmpty() ? order.getFullName() : (order.getUser() != null ? order.getUser().getUsername() : "Khách ẩn danh"),
                 order.getUser() != null ? order.getUser().getEmail() : "Không có",
@@ -436,187 +484,160 @@ public class AdminService {
         );
     }
 
-    // Delete
     @Transactional
     public void softDeleteProduct(Long productId) {
-        log.info("Admin soft delete sản phẩm ID: {}", productId);
-
-        Product product = productRepository.findByIdAndDeletedFalse(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm"));
-
-        product.setDeleted(true);
-        productRepository.save(product);
-
-        log.info("Đã soft delete sản phẩm ID: {}", productId);
+        getProductByIdNative(productId);
+        entityManager.createNativeQuery("UPDATE products SET deleted = true WHERE id = :id")
+                .setParameter("id", productId).executeUpdate();
     }
-
 
     @Transactional
     public Category addCategories(Category category) {
-        log.info("Admin thêm category mới: {}", category.getName());
+        Number count = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM categories WHERE LOWER(name) = LOWER(:name)")
+                .setParameter("name", category.getName()).getSingleResult();
+        if (count.intValue() > 0) throw new IllegalArgumentException("Tên danh mục đã tồn tại");
 
-        if (categoryRepository.existsByNameIgnoreCase(category.getName())) {
-            throw new IllegalArgumentException("Tên danh mục đã tồn tại");
-        }
-
-        return categoryRepository.save(category);
+        String insertSql = "INSERT INTO categories (name, description, active, deleted) VALUES (:name, :desc, :active, false)";
+        entityManager.createNativeQuery(insertSql)
+                .setParameter("name", category.getName())
+                .setParameter("desc", category.getDescription())
+                .setParameter("active", category.getActive() != null ? category.getActive() : true)
+                .executeUpdate();
+                
+        return (Category) entityManager.createNativeQuery("SELECT * FROM categories WHERE LOWER(name) = LOWER(:name)", Category.class)
+                .setParameter("name", category.getName()).getSingleResult();
     }
 
     @Transactional
     public Category updateCategory(Long id, Category categoryReq) {
-        log.info("Admin cập nhật category ID: {}", id);
-        Category category = categoryRepository.findByIdAndDeleted(id, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục"));
-        
-        category.setName(categoryReq.getName());
-        category.setDescription(categoryReq.getDescription());
-        category.setActive(categoryReq.getActive());
-        return categoryRepository.save(category);
+        getCategoryByIdNative(id);
+        entityManager.createNativeQuery("UPDATE categories SET name = :name, description = :desc, active = :active WHERE id = :id")
+                .setParameter("name", categoryReq.getName())
+                .setParameter("desc", categoryReq.getDescription())
+                .setParameter("active", categoryReq.getActive() != null ? categoryReq.getActive() : true)
+                .setParameter("id", id).executeUpdate();
+        return getCategoryByIdNative(id);
     }
 
     @Transactional
     public void deleteCategory(Long id) {
-        log.info("Admin xóa category ID: {}", id);
-        Category category = categoryRepository.findByIdAndDeleted(id, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục"));
-                category.setDeleted(true);
-        categoryRepository.save(category);
+        getCategoryByIdNative(id);
+        entityManager.createNativeQuery("UPDATE categories SET deleted = true WHERE id = :id").setParameter("id", id).executeUpdate();
     }
-
 
     @Transactional
     public Brand addBrand(Brand brand) {
-        log.info("Admin thêm brand mới: {}", brand.getName());
+        Number count = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM brands WHERE LOWER(name) = LOWER(:name)")
+                .setParameter("name", brand.getName()).getSingleResult();
+        if (count.intValue() > 0) throw new IllegalArgumentException("Tên thương hiệu đã tồn tại");
 
-        if (brandRepository.existsByNameIgnoreCase(brand.getName())) {
-            throw new IllegalArgumentException("Tên thương hiệu đã tồn tại");
-        }
+        String insertSql = "INSERT INTO brands (name, description, status, deleted) VALUES (:name, :desc, :status, false)";
+        entityManager.createNativeQuery(insertSql)
+                .setParameter("name", brand.getName())
+                .setParameter("desc", brand.getDescription())
+                .setParameter("status", brand.getStatus() != null ? brand.getStatus() : true)
+                .executeUpdate();
 
-        return brandRepository.save(brand);
+        return (Brand) entityManager.createNativeQuery("SELECT * FROM brands WHERE LOWER(name) = LOWER(:name)", Brand.class)
+                .setParameter("name", brand.getName()).getSingleResult();
     }
 
     @Transactional
     public Brand updateBrand(Long id, Brand brandReq) {
-        log.info("Admin cập nhật brand ID: {}", id);
-        Brand brand = brandRepository.findByIdAndDeleted(id, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thương hiệu"));
-        
-        brand.setName(brandReq.getName());
-        brand.setDescription(brandReq.getDescription());
-        brand.setStatus(brandReq.getStatus());
-        return brandRepository.save(brand);
+        getBrandByIdNative(id);
+        entityManager.createNativeQuery("UPDATE brands SET name = :name, description = :desc, status = :status WHERE id = :id")
+                .setParameter("name", brandReq.getName())
+                .setParameter("desc", brandReq.getDescription())
+                .setParameter("status", brandReq.getStatus() != null ? brandReq.getStatus() : true)
+                .setParameter("id", id).executeUpdate();
+        return getBrandByIdNative(id);
     }
 
     @Transactional
     public void deleteBrand(Long id) {
-        log.info("Admin xóa brand ID: {}", id);
-        Brand brand = brandRepository.findByIdAndDeleted(id, false)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thương hiệu"));
-                brand.setDeleted(true);
-        brandRepository.save(brand);
+        getBrandByIdNative(id);
+        entityManager.createNativeQuery("UPDATE brands SET deleted = true WHERE id = :id").setParameter("id", id).executeUpdate();
     }
-
 
     @Transactional
     public Blog createBlog(BlogDTO dto, MultipartFile image) {
-        log.info("Admin thêm blog mới: {}", dto.getTitle());
-        Blog blog = new Blog();
-        blog.setTitle(dto.getTitle());
-        blog.setCategory(dto.getCategory());
-        blog.setExcerpt(dto.getExcerpt());
-        blog.setAuthor(dto.getAuthor() != null ? dto.getAuthor() : "Admin");
-        blog.setContent(dto.getContent());
-        blog.setPublishedDate(new Date());
-        blog.setFeatured(dto.getFeatured() != null ? dto.getFeatured() : false);
-        blog.setTags(dto.getTags());
-        
-        if (image != null && !image.isEmpty()) {
-            blog.setThumbnail(uploadBlogImage(image));
-        } else {
-            blog.setThumbnail("");
-        }
+        String thumbnail = "";
+        if (image != null && !image.isEmpty()) thumbnail = uploadBlogImage(image);
 
-        return blogRepository.save(blog);
+        String insertSql = "INSERT INTO blogs (title, category, excerpt, author, content, published_date, featured, tags, thumbnail, views, deleted) " +
+                           "VALUES (:title, :category, :excerpt, :author, :content, CURRENT_TIMESTAMP, :featured, :tags, :thumbnail, 0, false)";
+        entityManager.createNativeQuery(insertSql)
+                .setParameter("title", dto.getTitle())
+                .setParameter("category", dto.getCategory())
+                .setParameter("excerpt", dto.getExcerpt())
+                .setParameter("author", dto.getAuthor() != null ? dto.getAuthor() : "Admin")
+                .setParameter("content", dto.getContent())
+                .setParameter("featured", dto.getFeatured() != null ? dto.getFeatured() : false)
+                .setParameter("tags", dto.getTags())
+                .setParameter("thumbnail", thumbnail).executeUpdate();
+
+        return (Blog) entityManager.createNativeQuery("SELECT * FROM blogs WHERE title = :title ORDER BY id DESC LIMIT 1", Blog.class)
+                .setParameter("title", dto.getTitle()).getSingleResult();
     }
 
     @Transactional
     public Blog updateBlog(Long id, BlogDTO dto, MultipartFile image) {
-        log.info("Admin cập nhật blog ID: {}", id);
-        Blog blog = blogRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết"));
-        
-        blog.setTitle(dto.getTitle());
-        blog.setCategory(dto.getCategory());
-        // Null-safe: keep existing value if DTO sends null
-        if (dto.getExcerpt() != null) blog.setExcerpt(dto.getExcerpt());
-        if (dto.getAuthor() != null && !dto.getAuthor().isBlank()) blog.setAuthor(dto.getAuthor());
-        if (dto.getContent() != null) blog.setContent(dto.getContent());
-        // Fix: old DB records may have NULL views — default to 0
-        if (blog.getViews() == null) blog.setViews(0);
-        if (dto.getFeatured() != null) blog.setFeatured(dto.getFeatured());
-        if (dto.getTags() != null) blog.setTags(dto.getTags());
+        Blog blog = getBlogByIdNative(id);
 
-        if (image != null && !image.isEmpty()) {
-            blog.setThumbnail(uploadBlogImage(image));
-        }
+        String thumbnail = blog.getThumbnail();
+        if (image != null && !image.isEmpty()) thumbnail = uploadBlogImage(image);
 
-        return blogRepository.save(blog);
+        entityManager.createNativeQuery("UPDATE blogs SET title = :title, category = :category, excerpt = :excerpt, author = :author, content = :content, featured = :featured, tags = :tags, thumbnail = :thumbnail WHERE id = :id")
+                .setParameter("title", dto.getTitle())
+                .setParameter("category", dto.getCategory())
+                .setParameter("excerpt", dto.getExcerpt() != null ? dto.getExcerpt() : blog.getExcerpt())
+                .setParameter("author", dto.getAuthor() != null && !dto.getAuthor().isBlank() ? dto.getAuthor() : blog.getAuthor())
+                .setParameter("content", dto.getContent() != null ? dto.getContent() : blog.getContent())
+                .setParameter("featured", dto.getFeatured() != null ? dto.getFeatured() : blog.getFeatured())
+                .setParameter("tags", dto.getTags() != null ? dto.getTags() : blog.getTags())
+                .setParameter("thumbnail", thumbnail)
+                .setParameter("id", id).executeUpdate();
+
+        return getBlogByIdNative(id);
     }
 
     @Transactional
     public void deleteBlog(Long id) {
-        log.info("Admin xóa blog ID: {}", id);
-        Blog blog = blogRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết"));
-
-
-        blog.setDeleted(true);
-        blogRepository.save(blog);
+        getBlogByIdNative(id);
+        entityManager.createNativeQuery("UPDATE blogs SET deleted = true WHERE id = :id").setParameter("id", id).executeUpdate();
     }
 
     private String uploadBlogImage(MultipartFile file) {
         try {
             Path uploadPath = Paths.get("uploads", "blogs").toAbsolutePath();
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
-            }
-            String originalFileName = file.getOriginalFilename();
-            String fileName = System.currentTimeMillis() + "_" + originalFileName;
-            Path filePath = uploadPath.resolve(fileName);
-            file.transferTo(filePath.toFile()); // absolute path — no temp dir issues
+            if (!Files.exists(uploadPath)) Files.createDirectories(uploadPath);
+            String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+            file.transferTo(uploadPath.resolve(fileName).toFile());
             return "/uploads/blogs/" + fileName;
         } catch (Exception e) {
             throw new RuntimeException("Không thể upload ảnh Blog: " + e.getMessage(), e);
         }
     }
 
-    // Order
     @Transactional(readOnly = true)
     public OrderResponse getOrderDetailsForAdmin(Long orderId) {
-        Order order = orderRepository.findByIdAndDeletedFalse(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng"));
-        return convertToOrderResponse(order);
+        return convertToOrderResponse(getOrderByIdNative(orderId));
     }
 
-    // Total
+    @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public java.util.Map<String, Object> getDashboardCharts(String period) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startDate;
-
         java.util.Map<String, java.util.Map<String, Object>> timeStats = new java.util.LinkedHashMap<>();
         java.time.format.DateTimeFormatter dayFormatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM");
-
 
         if ("today".equals(period)) {
             startDate = now.toLocalDate().atStartOfDay();
             for (int i = 0; i <= 23; i++) {
-                String label = String.format("%02d:00", i); // 00:00, 01:00... 23:00
+                String label = String.format("%02d:00", i);
                 java.util.Map<String, Object> data = new java.util.HashMap<>();
-                data.put("name", label);
-                data.put("revenue", BigDecimal.ZERO);
-                data.put("delivered", 0);
-                data.put("cancelled", 0);
+                data.put("name", label); data.put("revenue", BigDecimal.ZERO); data.put("delivered", 0); data.put("cancelled", 0);
                 timeStats.put(label, data);
             }
         } else if ("7days".equals(period)) {
@@ -624,10 +645,7 @@ public class AdminService {
             for (int i = 6; i >= 0; i--) {
                 String label = now.minusDays(i).format(dayFormatter);
                 java.util.Map<String, Object> data = new java.util.HashMap<>();
-                data.put("name", label);
-                data.put("revenue", BigDecimal.ZERO);
-                data.put("delivered", 0);
-                data.put("cancelled", 0);
+                data.put("name", label); data.put("revenue", BigDecimal.ZERO); data.put("delivered", 0); data.put("cancelled", 0);
                 timeStats.put(label, data);
             }
         } else if ("1month".equals(period)) {
@@ -635,10 +653,7 @@ public class AdminService {
             for (int i = 29; i >= 0; i--) {
                 String label = now.minusDays(i).format(dayFormatter);
                 java.util.Map<String, Object> data = new java.util.HashMap<>();
-                data.put("name", label);
-                data.put("revenue", BigDecimal.ZERO);
-                data.put("delivered", 0);
-                data.put("cancelled", 0);
+                data.put("name", label); data.put("revenue", BigDecimal.ZERO); data.put("delivered", 0); data.put("cancelled", 0);
                 timeStats.put(label, data);
             }
         } else if ("1year".equals(period)) {
@@ -647,30 +662,22 @@ public class AdminService {
                 LocalDateTime m = now.minusMonths(i);
                 String label = "T" + m.getMonthValue() + "/" + (m.getYear() % 100);
                 java.util.Map<String, Object> data = new java.util.HashMap<>();
-                data.put("name", label);
-                data.put("revenue", BigDecimal.ZERO);
-                data.put("delivered", 0);
-                data.put("cancelled", 0);
+                data.put("name", label); data.put("revenue", BigDecimal.ZERO); data.put("delivered", 0); data.put("cancelled", 0);
                 timeStats.put(label, data);
             }
-        } else { // Default
+        } else {
             startDate = now.minusMonths(5).withDayOfMonth(1).toLocalDate().atStartOfDay();
             for (int i = 5; i >= 0; i--) {
                 LocalDateTime m = now.minusMonths(i);
                 String label = "T" + m.getMonthValue() + "/" + (m.getYear() % 100);
                 java.util.Map<String, Object> data = new java.util.HashMap<>();
-                data.put("name", label);
-                data.put("revenue", BigDecimal.ZERO);
-                data.put("delivered", 0);
-                data.put("cancelled", 0);
+                data.put("name", label); data.put("revenue", BigDecimal.ZERO); data.put("delivered", 0); data.put("cancelled", 0);
                 timeStats.put(label, data);
             }
         }
 
-        // Order
-        List<Order> orders = orderRepository.findAll().stream()
-                .filter(o -> !o.isDeleted() && o.getCreatedAt() != null && !o.getCreatedAt().isBefore(startDate))
-                .collect(Collectors.toList());
+        List<Order> orders = entityManager.createNativeQuery("SELECT * FROM orders WHERE deleted = false AND created_at >= :startDate", Order.class)
+                .setParameter("startDate", startDate).getResultList();
 
         java.util.Map<String, Integer> brandSales = new java.util.HashMap<>();
 
@@ -689,17 +696,14 @@ public class AdminService {
 
                 if (order.getStatus() == OrderStatus.DELIVERED || order.getPaymentStatus() == PaymentStatus.SUCCESS) {
                     BigDecimal currentRev = (BigDecimal) data.get("revenue");
-                    data.put("revenue",
-                            currentRev.add(order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO));
+                    data.put("revenue", currentRev.add(order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO));
                 }
-                // Status
                 if (order.getStatus() == OrderStatus.DELIVERED) {
                     data.put("delivered", (Integer) data.get("delivered") + 1);
                 } else if (order.getStatus() == OrderStatus.CANCELLED) {
                     data.put("cancelled", (Integer) data.get("cancelled") + 1);
                 }
             }
-
 
             if (order.getStatus() != OrderStatus.CANCELLED && order.getStatus() != OrderStatus.CANCEL_REQUESTED) {
                 if (order.getItems() != null) {
@@ -715,51 +719,31 @@ public class AdminService {
 
         java.util.Map<String, Object> response = new java.util.HashMap<>();
         response.put("chartData", new java.util.ArrayList<>(timeStats.values()));
-
         List<java.util.Map<String, Object>> brandDataList = brandSales.entrySet().stream()
                 .map(e -> {
                     java.util.Map<String, Object> map = new java.util.HashMap<>();
-                    map.put("name", e.getKey());
-                    map.put("sold", e.getValue());
-                    return map;
-                })
-                .collect(Collectors.toList());
-
+                    map.put("name", e.getKey()); map.put("sold", e.getValue()); return map;
+                }).collect(Collectors.toList());
         response.put("brandData", brandDataList);
         return response;
     }
 
-
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     public void pinToTop(String entityType, Long id) {
         int newPriority = (int) -(System.currentTimeMillis() / 1000);
+        String table = "";
         switch (entityType.toLowerCase()) {
-            case "product":
-                Product product = productRepository.findById(id)
-                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm"));
-                product.setDisplayOrder(newPriority);
-                productRepository.save(product);
-                break;
-            case "blog":
-                Blog blog = blogRepository.findById(id)
-                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết"));
-                blog.setDisplayOrder(newPriority);
-                blogRepository.save(blog);
-                break;
-            case "category":
-                Category category = categoryRepository.findById(id)
-                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục"));
-                category.setDisplayOrder(newPriority);
-                categoryRepository.save(category);
-                break;
-            case "brand":
-                Brand brand = brandRepository.findById(id)
-                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thương hiệu"));
-                brand.setDisplayOrder(newPriority);
-                brandRepository.save(brand);
-                break;
-            default:
-                throw new IllegalArgumentException("Loại thực thể không hợp lệ");
+            case "product": table = "products"; break;
+            case "blog": table = "blogs"; break;
+            case "category": table = "categories"; break;
+            case "brand": table = "brands"; break;
+            default: throw new IllegalArgumentException("Loại thực thể không hợp lệ");
         }
+        Number count = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM " + table + " WHERE id = :id").setParameter("id", id).getSingleResult();
+        if (count.intValue() == 0) throw new ResourceNotFoundException("Không tìm thấy thực thể");
+
+        entityManager.createNativeQuery("UPDATE " + table + " SET display_order = :order WHERE id = :id")
+                .setParameter("order", newPriority)
+                .setParameter("id", id).executeUpdate();
     }
 }

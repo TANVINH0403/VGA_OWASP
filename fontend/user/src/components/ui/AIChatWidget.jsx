@@ -164,7 +164,7 @@ Bắt buộc phải trả về JSON theo đúng schema sau:
                          const dbImageUrl = p.imageUrl || p.imgUrl || p.img_url || p.image || (p.images && p.images.length > 0 && p.images[0]?.url);
                          let formattedImageUrl = dbImageUrl;
                          if (dbImageUrl && dbImageUrl.startsWith('/uploads/')) {
-                           formattedImageUrl = `http://localhost:8080${dbImageUrl}`;
+                           formattedImageUrl = `http://localhost:8082${dbImageUrl}`;
                          }
                          
                          return (

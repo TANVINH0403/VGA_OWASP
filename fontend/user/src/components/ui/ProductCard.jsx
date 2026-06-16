@@ -61,7 +61,7 @@ const ProductCard = ({ product }) => {
   // Process
   let formattedImageUrl = dbImageUrl;
   if (dbImageUrl && dbImageUrl.startsWith('/uploads/')) {
-    formattedImageUrl = `http://localhost:8080${dbImageUrl}`;
+    formattedImageUrl = `http://localhost:8082${dbImageUrl}`;
   }
 
   // Error handling
