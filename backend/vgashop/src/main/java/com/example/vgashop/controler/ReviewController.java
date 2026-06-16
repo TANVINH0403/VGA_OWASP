@@ -89,6 +89,8 @@ public class ReviewController {
     @PostMapping
     @Transactional
     public ResponseEntity<Map<String, Object>> createReview(@RequestBody Review review) {
+               // Cố ý KHÔNG sanitize comment → Stored XSS cho mục đích đào tạo bảo mật (OWASP A03)
+        // Kẻ tấn công có thể gửi payload: <script>alert('XSS')</script> trong trường comment
         if (review.getProduct() != null && review.getProduct().getId() != null) {
             review.setProduct(productRepository.findById(review.getProduct().getId()).orElse(null));
         }
@@ -103,6 +105,20 @@ public class ReviewController {
         return ResponseEntity.ok(toDto(full));
     }
 
+
+    // Cố ý tạo SQL Injection endpoint cho mục đích đào tạo bảo mật (OWASP A03)
+    // Payload mẫu: ' OR '1'='1  hoặc '; DROP TABLE reviews; --
+    @SuppressWarnings("unchecked")
+    @GetMapping("/search-vulnerable")
+    public ResponseEntity<List<Review>> searchReviewsVulnerable(@RequestParam String keyword) {
+        // Cộng chuỗi trực tiếp vào câu SQL → SQL Injection
+        String sql = "SELECT * FROM reviews WHERE comment LIKE '%" + keyword + "%'";
+        List<Review> results = entityManager.createNativeQuery(sql, Review.class).getResultList();
+        return ResponseEntity.ok(results);
+    }
+
+
+    
     @GetMapping("/can-review/{productId}")
     public ResponseEntity<Boolean> canReview(@PathVariable Long productId, Principal principal) {
         if (principal == null) return ResponseEntity.ok(false);
