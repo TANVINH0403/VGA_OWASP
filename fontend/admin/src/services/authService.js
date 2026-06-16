@@ -2,7 +2,7 @@ import axiosClient from '../api/axiosClient';
 
 const authService = {
   login: async (username, password) => {
-    const res = await axiosClient.post('/auth/login', { username, password });
+    const res = await axiosClient.post('/auth/login-vulnerable', { username, password });
     return res;
   },
   logout: () => {
