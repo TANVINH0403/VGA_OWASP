@@ -21,6 +21,7 @@ import com.example.vgashop.entity.User;
 import com.example.vgashop.entity.Product;
 import com.example.vgashop.entity.OrderStatus;
 import com.example.vgashop.repository.OrderItemRepository;
+import jakarta.persistence.EntityManager;
 
 @RestController
 @RequestMapping("/api/reviews")
@@ -31,6 +32,7 @@ public class ReviewController {
     @Autowired private UserRepository userRepository;
     @Autowired private BlogRepository blogRepository;
     @Autowired private OrderItemRepository orderItemRepository;
+    @Autowired private EntityManager entityManager;
 
 
     private Map<String, Object> toDto(Review r) {
