@@ -362,15 +362,15 @@ public class AdminService {
     @SuppressWarnings("unchecked")
     @Transactional(readOnly = true)
     public Page<ProductAdminResponse> getAllProductForAdmin(int page, int size, String search) {
-        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM products WHERE deleted = false");
-        StringBuilder fetchSql = new StringBuilder("SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE deleted = false");
+        StringBuilder countSql = new StringBuilder("SELECT COUNT(p.id) FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.deleted = false");
+        StringBuilder fetchSql = new StringBuilder("SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.deleted = false");
         
         if (search != null && !search.trim().isEmpty()) {
-            countSql.append(" AND LOWER(name) LIKE LOWER(:search)");
-            fetchSql.append(" AND LOWER(name) LIKE LOWER(:search)");
+            countSql.append(" AND (LOWER(p.name) LIKE LOWER(:search) OR LOWER(c.name) LIKE LOWER(:search))");
+            fetchSql.append(" AND (LOWER(p.name) LIKE LOWER(:search) OR LOWER(c.name) LIKE LOWER(:search))");
         }
         
-        fetchSql.append(" ORDER BY display_order ASC, id DESC LIMIT :limit OFFSET :offset");
+        fetchSql.append(" ORDER BY p.display_order ASC, p.id DESC LIMIT :limit OFFSET :offset");
 
         var countQuery = entityManager.createNativeQuery(countSql.toString());
         var fetchQuery = entityManager.createNativeQuery(fetchSql.toString(), Product.class);

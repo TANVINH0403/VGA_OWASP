@@ -28,7 +28,7 @@ const ProductForm = () => {
   const getImageUrl = (imgUrl) => {
     if (!imgUrl) return null;
     if (imgUrl.startsWith('/uploads/')) return `http://localhost:8082${imgUrl}`;
-    if (imgUrl.startsWith('/images/')) return `http://localhost:5175${imgUrl}`;
+    if (imgUrl.startsWith('/images/')) return `http://localhost:4175${imgUrl}`;
     return imgUrl;
   };
 

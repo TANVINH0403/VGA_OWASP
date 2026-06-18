@@ -173,24 +173,44 @@ public class UserService {
         return new PageImpl<>(content, PageRequest.of(page, size), total.longValue());
     }
 
-    @SuppressWarnings("unchecked")
-    public Page<User> searchUsers(String keyWord, int page, int size) {
-        String searchParam = (keyWord == null || keyWord.trim().isEmpty()) ? "%" : "%" + keyWord.trim() + "%";
+   @SuppressWarnings("unchecked")
+public Page<User> searchUsers(String keyWord, int page, int size) {
 
-        String countSql = "SELECT COUNT(*) FROM users WHERE deleted = false AND (LOWER(username) LIKE LOWER(:keyword) OR LOWER(email) LIKE LOWER(:keyword))";
-        Number total = (Number) entityManager.createNativeQuery(countSql)
-                .setParameter("keyword", searchParam)
-                .getSingleResult();
+    String searchParam =
+            (keyWord == null || keyWord.trim().isEmpty())
+                    ? "%"
+                    : "%" + keyWord.trim() + "%";
 
-        String fetchSql = "SELECT * FROM users WHERE deleted = false AND (LOWER(username) LIKE LOWER(:keyword) OR LOWER(email) LIKE LOWER(:keyword)) ORDER BY username ASC LIMIT :limit OFFSET :offset";
-        List<User> content = entityManager.createNativeQuery(fetchSql, User.class)
-                .setParameter("keyword", searchParam)
-                .setParameter("limit", size)
-                .setParameter("offset", page * size)
-                .getResultList();
+    String countSql =
+            "SELECT COUNT(*) " +
+            "FROM users " +
+            "WHERE deleted = false " +
+            "AND (LOWER(username) LIKE LOWER(:keyword) " +
+            "OR LOWER(email) LIKE LOWER(:keyword))";
 
-        return new PageImpl<>(content, PageRequest.of(page, size), total.longValue());
-    }
+    Number total = (Number) entityManager
+            .createNativeQuery(countSql)
+            .setParameter("keyword", searchParam)
+            .getSingleResult();
+
+   String fetchSql =
+    "SELECT * FROM users " +
+    "WHERE deleted = false " +
+    "AND (LOWER(username) LIKE LOWER('%" + keyWord + "%') " +
+    "OR LOWER(email) LIKE LOWER('%" + keyWord + "%')) " +
+    "ORDER BY username ASC";
+    List<User> content = entityManager
+            .createNativeQuery(fetchSql, User.class)
+            .setParameter("keyword", searchParam)
+            .setParameter("limit", size)
+            .setParameter("offset", page * size)
+            .getResultList();
+
+    return new PageImpl<>(
+            content,
+            PageRequest.of(page, size),
+            total.longValue());
+}
 
     public User getUserById(Long id) {
         String sql = "SELECT * FROM users WHERE id = :id AND deleted = false";

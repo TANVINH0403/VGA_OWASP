@@ -13,13 +13,13 @@ services:
       POSTGRES_PASSWORD: "3007"
       POSTGRES_DB: vga_store
     ports:
-      - "5434:5432"
+      - "4434:5432"
     networks:
       - vga-network
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d vga_store"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d vga_store" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -49,7 +49,7 @@ services:
       dockerfile: Dockerfile
     container_name: vga_owasp_admin
     ports:
-      - "5176:80"
+      - "4176:80"
     networks:
       - vga-network
     depends_on:
@@ -61,7 +61,7 @@ services:
       dockerfile: Dockerfile
     container_name: vga_owasp_user
     ports:
-      - "5175:80"
+      - "4175:80"
     networks:
       - vga-network
     depends_on:

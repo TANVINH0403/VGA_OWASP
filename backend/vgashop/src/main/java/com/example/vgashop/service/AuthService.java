@@ -45,15 +45,22 @@ public class AuthService {
         return count.intValue() > 0;
     }
 
-    private User findByUsername(String username) {
-        try {
-            return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE username = :username", User.class)
-                    .setParameter("username", username)
-                    .getSingleResult();
-        } catch (NoResultException e) {
-            return null;
-        }
+    // ĐOẠN CODE BỊ SỬA ĐỂ TẠO LỖI SQLi
+private User findByUsername(String username) {
+    try {
+        // Cộng chuỗi trực tiếp biến 'username' vào câu lệnh SQL
+        // String sql = "SELECT * FROM users WHERE username = '" + username + "'";
+            String sql =
+        "SELECT * FROM users " +
+        "WHERE username = '" + username + "' " +
+        "AND password = '" + password + "'";
+        
+        return (User) entityManager.createNativeQuery(sql, User.class)
+                .getSingleResult();`
+    } catch (NoResultException e) {
+        return null;
     }
+}
 
     private User findByEmail(String email) {
         try {
@@ -128,8 +135,10 @@ public class AuthService {
 
         if (Boolean.TRUE.equals(user.isDeleted()))
             throw new RuntimeException("Account does not exist or has been removed");
+
         if (Boolean.FALSE.equals(user.getStatus()))
             throw new RuntimeException("Account is disabled. Please contact support.");
+
         if (!passwordEncoder.matches(password, user.getPassword()))
             throw new RuntimeException("Invalid username or password");
 
