@@ -194,11 +194,13 @@ public Page<User> searchUsers(String keyWord, int page, int size) {
             .getSingleResult();
 
    String fetchSql =
+    String fetchSql =
     "SELECT * FROM users " +
     "WHERE deleted = false " +
-    "AND (LOWER(username) LIKE LOWER('%" + keyWord + "%') " +
+    "AND (LOWER(username) LIKE LOWER('%" + keyWord + "%') " + // LỖI: Nối chuỗi trực tiếp!
     "OR LOWER(email) LIKE LOWER('%" + keyWord + "%')) " +
     "ORDER BY username ASC";
+
     List<User> content = entityManager
             .createNativeQuery(fetchSql, User.class)
             .setParameter("keyword", searchParam)
@@ -239,6 +241,7 @@ public Page<User> searchUsers(String keyWord, int page, int size) {
         }
     }
 
+    
     @Transactional
     public User createUser(UserDTO dto) {
         Number userCount = (Number) entityManager.createNativeQuery("SELECT COUNT(*) FROM users WHERE username = :username")

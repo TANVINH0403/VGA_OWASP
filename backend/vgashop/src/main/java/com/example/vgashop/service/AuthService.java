@@ -46,22 +46,31 @@ public class AuthService {
     }
 
     // ĐOẠN CODE BỊ SỬA ĐỂ TẠO LỖI SQLi
-private User findByUsername(String username) {
-    try {
-        // Cộng chuỗi trực tiếp biến 'username' vào câu lệnh SQL
-        // String sql = "SELECT * FROM users WHERE username = '" + username + "'";
-            String sql =
-        "SELECT * FROM users " +
-        "WHERE username = '" + username + "' " +
-        "AND password = '" + password + "'";
-        
-        return (User) entityManager.createNativeQuery(sql, User.class)
-                .getSingleResult();`
-    } catch (NoResultException e) {
-        return null;
+    private User findByUsername(String username) {
+        try {
+            // Cộng chuỗi trực tiếp biến 'username' vào câu lệnh SQL
+            String sql = "SELECT * FROM users WHERE username = '" + username + "'";
+            
+            return (User) entityManager.createNativeQuery(sql, User.class)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
     }
-}
 
+        // HÀM CỐ TÌNH GÂY LỖI BYPASS LOGIN CHO LAB OWASP
+    private User findByUsernameAndPasswordInsecure(String username, String password) {
+        try {
+            // Lỗ hổng ghép chuỗi cả username và password
+            String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'";
+            return (User) entityManager.createNativeQuery(sql, User.class)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
+    }
+
+    
     private User findByEmail(String email) {
         try {
             return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE email = :email", User.class)
@@ -127,7 +136,7 @@ private User findByUsername(String username) {
     }
 
     public AuthResponse login(String username, String password) {
-        User user = findByUsername(username);
+         User user = findByUsernameAndPasswordInsecure(username, password);
         
         if (user == null) {
             throw new ResourceNotFoundException("Invalid username or password");
@@ -139,8 +148,8 @@ private User findByUsername(String username) {
         if (Boolean.FALSE.equals(user.getStatus()))
             throw new RuntimeException("Account is disabled. Please contact support.");
 
-        if (!passwordEncoder.matches(password, user.getPassword()))
-            throw new RuntimeException("Invalid username or password");
+        // if (!passwordEncoder.matches(password, user.getPassword()))
+        //     throw new RuntimeException("Invalid username or password");
 
         return new AuthResponse(jwtUtil.generateToken(user.getUsername(), user.getRole()),
                 user.getUsername(), user.getEmail(), user.getRole().name(), user.getId(),
