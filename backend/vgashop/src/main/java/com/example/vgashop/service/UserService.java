@@ -181,24 +181,29 @@ public Page<User> searchUsers(String keyWord, int page, int size) {
                     ? "%"
                     : "%" + keyWord.trim() + "%";
 
-    String countSql =
-            "SELECT COUNT(*) " +
-            "FROM users " +
-            "WHERE deleted = false " +
-            "AND (LOWER(username) LIKE LOWER(:keyword) " +
-            "OR LOWER(email) LIKE LOWER(:keyword))";
+    // String countSql =
+    //         "SELECT COUNT(*) " +
+    //         "FROM users " +
+    //         "WHERE deleted = false " +
+    //         "AND (LOWER(username) LIKE LOWER(:keyword) " +
+    //         "OR LOWER(email) LIKE LOWER(:keyword))";
+
+    String countSql = "SELECT COUNT(*) FROM users WHERE username LIKE '%" + keyWord + "%'";
+    String fetchSql = "SELECT * FROM users WHERE deleted = false " +
+                      "AND (username LIKE '%" + keyWord + "%' OR email LIKE '%" + keyWord + "%') " +
+                      "ORDER BY username ASC";
 
     Number total = (Number) entityManager
             .createNativeQuery(countSql)
             .setParameter("keyword", searchParam)
             .getSingleResult();
 
-    String fetchSql =
-    "SELECT * FROM users " +
-    "WHERE deleted = false " +
-    "AND (LOWER(username) LIKE LOWER('%" + keyWord + "%') " + // LỖI: Nối chuỗi trực tiếp!
-    "OR LOWER(email) LIKE LOWER('%" + keyWord + "%')) " +
-    "ORDER BY username ASC";
+    // String fetchSql =
+    // "SELECT * FROM users " +
+    // "WHERE deleted = false " +
+    // "AND (LOWER(username) LIKE LOWER('%" + keyWord + "%') " + // LỖI: Nối chuỗi trực tiếp!
+    // "OR LOWER(email) LIKE LOWER('%" + keyWord + "%')) " +
+    // "ORDER BY username ASC";
 
     List<User> content = entityManager
             .createNativeQuery(fetchSql, User.class)
