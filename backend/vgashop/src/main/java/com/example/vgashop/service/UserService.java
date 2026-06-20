@@ -160,7 +160,10 @@ public class UserService {
         String countSql = "SELECT COUNT(*) FROM users WHERE deleted = false";
         Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
 
-        String fetchSql = "SELECT * FROM users WHERE deleted = false ORDER BY " + sortBy + " " + direction + " LIMIT :limit OFFSET :offset";
+        String safeSort = sortBy.matches("^[a-zA-Z0-9_]+$") ? sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase() : "id";
+        String safeDir = direction.equalsIgnoreCase("desc") ? "DESC" : "ASC";
+        
+        String fetchSql = "SELECT * FROM users WHERE deleted = false ORDER BY " + safeSort + " " + safeDir + " LIMIT :limit OFFSET :offset";
         
         List<User> content = entityManager.createNativeQuery(fetchSql, User.class)
                 .setParameter("limit", size)
