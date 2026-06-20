@@ -96,15 +96,19 @@ public class ProductService {
 
     @SuppressWarnings("unchecked")
     public Page<Product> filterByBrand(String brand) {
-        String countSql = "SELECT COUNT(p.*) FROM products p JOIN brands b ON p.brand_id = b.id WHERE b.name = :brand";
-        Number total = (Number) entityManager.createNativeQuery(countSql).setParameter("brand", brand).getSingleResult();
+        try {
+            // LỖI BẢO MẬT: Nối chuỗi trực tiếp (Error-Based SQLi)
+            String countSql = "SELECT COUNT(p.*) FROM products p JOIN brands b ON p.brand_id = b.id WHERE b.name = '" + brand + "'";
+            Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
 
-        String fetchSql = "SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p JOIN brands b ON p.brand_id = b.id WHERE b.name = :brand";
-        List<Product> content = entityManager.createNativeQuery(fetchSql, Product.class)
-                .setParameter("brand", brand)
-                .getResultList();
+            String fetchSql = "SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p JOIN brands b ON p.brand_id = b.id WHERE b.name = '" + brand + "'";
+            List<Product> content = entityManager.createNativeQuery(fetchSql, Product.class).getResultList();
 
-        return new PageImpl<>(content, Pageable.unpaged(), total.longValue());
+            return new PageImpl<>(content, Pageable.unpaged(), total.longValue());
+        } catch (Exception e) {
+            // LỖI: Cố tình trả về chi tiết lỗi hệ thống DB ra ngoài
+            throw new RuntimeException("Database Error: " + e.getMessage());
+        }
     }
 
     @SuppressWarnings("unchecked")

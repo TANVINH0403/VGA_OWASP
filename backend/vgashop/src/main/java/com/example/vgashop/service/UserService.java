@@ -193,7 +193,6 @@ public Page<User> searchUsers(String keyWord, int page, int size) {
             .setParameter("keyword", searchParam)
             .getSingleResult();
 
-   String fetchSql =
     String fetchSql =
     "SELECT * FROM users " +
     "WHERE deleted = false " +
