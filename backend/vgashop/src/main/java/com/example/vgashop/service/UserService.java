@@ -160,10 +160,7 @@ public class UserService {
         String countSql = "SELECT COUNT(*) FROM users WHERE deleted = false";
         Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
 
-        String safeSort = sortBy.matches("^[a-zA-Z0-9_]+$") ? sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase() : "id";
-        String safeDir = direction.equalsIgnoreCase("desc") ? "DESC" : "ASC";
-        
-        String fetchSql = "SELECT * FROM users WHERE deleted = false ORDER BY " + safeSort + " " + safeDir + " LIMIT :limit OFFSET :offset";
+        String fetchSql = "SELECT * FROM users WHERE deleted = false ORDER BY " + sortBy + " " + direction + " LIMIT :limit OFFSET :offset";
         
         List<User> content = entityManager.createNativeQuery(fetchSql, User.class)
                 .setParameter("limit", size)
@@ -173,51 +170,78 @@ public class UserService {
         return new PageImpl<>(content, PageRequest.of(page, size), total.longValue());
     }
 
-   @SuppressWarnings("unchecked")
+//    @SuppressWarnings("unchecked")
+// public Page<User> searchUsers(String keyWord, int page, int size) {
+
+//     String searchParam =
+//             (keyWord == null || keyWord.trim().isEmpty())
+//                     ? "%"
+//                     : "%" + keyWord.trim() + "%";
+
+//     // String countSql =
+//     //         "SELECT COUNT(*) " +
+//     //         "FROM users " +
+//     //         "WHERE deleted = false " +
+//     //         "AND (LOWER(username) LIKE LOWER(:keyword) " +
+//     //         "OR LOWER(email) LIKE LOWER(:keyword))";
+
+//     String countSql = "SELECT COUNT(*) FROM users WHERE username LIKE '%" + keyWord + "%'";
+//     String fetchSql = "SELECT * FROM users WHERE deleted = false " +
+//                       "AND (username LIKE '%" + keyWord + "%' OR email LIKE '%" + keyWord + "%') " +
+//                       "ORDER BY username ASC";
+
+//                       // Dòng này sẽ in ra Terminal câu lệnh SQL thực tế đang chạy
+// System.out.println("--- SQL DEBUG: " + fetchSql + " ---");
+//     Number total = (Number) entityManager
+//             .createNativeQuery(countSql)
+//             .setParameter("keyword", searchParam)
+//             .getSingleResult();
+
+//     // String fetchSql =
+//     // "SELECT * FROM users " +
+//     // "WHERE deleted = false " +
+//     // "AND (LOWER(username) LIKE LOWER('%" + keyWord + "%') " + // LỖI: Nối chuỗi trực tiếp!
+//     // "OR LOWER(email) LIKE LOWER('%" + keyWord + "%')) " +
+//     // "ORDER BY username ASC";
+
+//     List<User> content = entityManager
+//             .createNativeQuery(fetchSql, User.class)
+//             .setParameter("keyword", searchParam)
+//             .setParameter("limit", size)
+//             .setParameter("offset", page * size)
+//             .getResultList();
+
+//     return new PageImpl<>(
+//             content,
+//             PageRequest.of(page, size),
+//             total.longValue());
+// }
+
+
+@SuppressWarnings("unchecked")
 public Page<User> searchUsers(String keyWord, int page, int size) {
+    // 1. Xử lý giá trị mặc định để tránh null
+    String safeKeyword = (keyWord == null || keyWord.trim().isEmpty()) ? "" : keyWord.trim();
 
-    String searchParam =
-            (keyWord == null || keyWord.trim().isEmpty())
-                    ? "%"
-                    : "%" + keyWord.trim() + "%";
-
-    // String countSql =
-    //         "SELECT COUNT(*) " +
-    //         "FROM users " +
-    //         "WHERE deleted = false " +
-    //         "AND (LOWER(username) LIKE LOWER(:keyword) " +
-    //         "OR LOWER(email) LIKE LOWER(:keyword))";
-
-    String countSql = "SELECT COUNT(*) FROM users WHERE username LIKE '%" + keyWord + "%'";
+    // 2. NỐI CHUỖI TRỰC TIẾP (Đây chính là lỗ hổng)
+    String countSql = "SELECT COUNT(*) FROM users WHERE username LIKE '%" + safeKeyword + "%'";
     String fetchSql = "SELECT * FROM users WHERE deleted = false " +
-                      "AND (username LIKE '%" + keyWord + "%' OR email LIKE '%" + keyWord + "%') " +
-                      "ORDER BY username ASC";
+                      "AND (username LIKE '%" + safeKeyword + "%' OR email LIKE '%" + safeKeyword + "%') " +
+                      "ORDER BY username ASC " +
+                      "LIMIT " + size + " OFFSET " + (page * size);
 
-    Number total = (Number) entityManager
-            .createNativeQuery(countSql)
-            .setParameter("keyword", searchParam)
-            .getSingleResult();
+    System.out.println("--- SQL DEBUG: " + fetchSql + " ---");
 
-    // String fetchSql =
-    // "SELECT * FROM users " +
-    // "WHERE deleted = false " +
-    // "AND (LOWER(username) LIKE LOWER('%" + keyWord + "%') " + // LỖI: Nối chuỗi trực tiếp!
-    // "OR LOWER(email) LIKE LOWER('%" + keyWord + "%')) " +
-    // "ORDER BY username ASC";
+    // 3. Thực thi query mà KHÔNG DÙNG .setParameter cho keyword
+    // Lưu ý: limit và offset vẫn nên để tham số nếu muốn, 
+    // nhưng ở đây ta tập trung vào lỗi ở keyword.
+    Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
 
-    List<User> content = entityManager
-            .createNativeQuery(fetchSql, User.class)
-            .setParameter("keyword", searchParam)
-            .setParameter("limit", size)
-            .setParameter("offset", page * size)
+    List<User> content = entityManager.createNativeQuery(fetchSql, User.class)
             .getResultList();
 
-    return new PageImpl<>(
-            content,
-            PageRequest.of(page, size),
-            total.longValue());
+    return new PageImpl<>(content, PageRequest.of(page, size), total.longValue());
 }
-
     public User getUserById(Long id) {
         String sql = "SELECT * FROM users WHERE id = :id AND deleted = false";
         try {
