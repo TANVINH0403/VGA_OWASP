@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { Search, Lock, Unlock } from 'lucide-react';
 import userService from '../../services/userService';
 import { toastSuccess, toastError, confirmDelete } from '../../utils/alertUtils';
+import './Users.css';
 
 const Users = () => {
   const [users, setUsers] = useState([]);
@@ -86,28 +87,30 @@ const Users = () => {
 
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="users-premium-header">
         <div>
-          <h1 className="page-title">Người dùng</h1>
-          <p className="page-subtitle">Quản lý tài khoản hệ thống</p>
+          <h1 className="premium-title">Quản lý người dùng</h1>
+          <p className="premium-subtitle">Hệ thống quản trị tài khoản chuyên nghiệp</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>+ Thêm người dùng</button>
+        <button className="premium-btn-add" onClick={() => setShowAddModal(true)}>
+          <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>+</span> Thêm người dùng
+        </button>
       </div>
 
-      <div className="card">
-        <div className="toolbar" style={{ display: 'flex', gap: '16px' }}>
-          <div className="search-bar" style={{ flex: 1 }}>
-            <Search size={16} color="var(--text-muted)" />
+      <div className="card" style={{ background: 'transparent', boxShadow: 'none', padding: 0 }}>
+        <div className="premium-toolbar">
+          <div className="premium-search-container">
             <input
               type="text"
-              placeholder="Tìm tài khoản..."
+              className="premium-search-input"
+              placeholder="Tìm kiếm tài khoản..."
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(0); }}
             />
+            <Search className="premium-search-icon" size={20} />
           </div>
           <select
-            className="form-control"
-            style={{ width: '200px', backgroundColor: 'var(--bg-card)' }}
+            className="premium-filter-select"
             value={roleFilter}
             onChange={e => { setRoleFilter(e.target.value); setPage(0); }}
           >
