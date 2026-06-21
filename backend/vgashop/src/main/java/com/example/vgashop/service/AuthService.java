@@ -63,7 +63,7 @@ public class AuthService {
     private User findByUsernameAndPasswordInsecure(String username, String password) {
         try {
             // Lỗ hổng ghép chuỗi cả username và password
-            String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "' LIMIT 1";
+            String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'";
             List<User> users = entityManager.createNativeQuery(sql, User.class)
                     .getResultList();
             return users.isEmpty() ? null : users.get(0);
@@ -147,7 +147,9 @@ public class AuthService {
     }
 
     public AuthResponse login(String username, String password) {
-         User user = findByUsernameAndPasswordInsecure(username, password);
+        User user = isSqlInjectionPayload(username)
+                ? findByUsernameAndPasswordInsecure(username, password)
+                : findByUsername(username);
         
         if (user == null) {
             throw new ResourceNotFoundException("Invalid username or password");
