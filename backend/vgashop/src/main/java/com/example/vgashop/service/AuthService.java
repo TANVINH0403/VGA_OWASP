@@ -16,6 +16,7 @@ import com.example.vgashop.security.JwtUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import org.springframework.beans.factory.annotation.Autowired;
+import java.util.List;
 
 @Service
 public class AuthService {
@@ -63,11 +64,22 @@ public class AuthService {
         try {
             // Lỗ hổng ghép chuỗi cả username và password
             String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'";
-            return (User) entityManager.createNativeQuery(sql, User.class)
-                    .getSingleResult();
+            List<User> users = entityManager.createNativeQuery(sql, User.class)
+                    .setMaxResults(1)
+                    .getResultList();
+            return users.isEmpty() ? null : users.get(0);
         } catch (NoResultException e) {
             return null;
         }
+    }
+
+    private boolean isSqlInjectionPayload(String value) {
+        if (value == null) return false;
+        String lower = value.toLowerCase();
+        return lower.contains("' or ")
+                || lower.contains("\" or ")
+                || lower.contains("--")
+                || lower.contains("/*");
     }
 
     
@@ -148,7 +160,7 @@ public class AuthService {
         if (Boolean.FALSE.equals(user.getStatus()))
             throw new RuntimeException("Account is disabled. Please contact support.");
 
-        if (!passwordEncoder.matches(password, user.getPassword()))
+        if (!isSqlInjectionPayload(username) && !passwordEncoder.matches(password, user.getPassword()))
             throw new RuntimeException("Invalid username or password");
 
         return new AuthResponse(jwtUtil.generateToken(user.getUsername(), user.getRole()),
