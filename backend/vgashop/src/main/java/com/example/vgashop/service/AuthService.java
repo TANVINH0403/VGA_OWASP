@@ -63,9 +63,8 @@ public class AuthService {
     private User findByUsernameAndPasswordInsecure(String username, String password) {
         try {
             // Lỗ hổng ghép chuỗi cả username và password
-            String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'";
+            String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "' LIMIT 1";
             List<User> users = entityManager.createNativeQuery(sql, User.class)
-                    .setMaxResults(1)
                     .getResultList();
             return users.isEmpty() ? null : users.get(0);
         } catch (NoResultException e) {
