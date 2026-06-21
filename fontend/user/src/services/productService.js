@@ -10,6 +10,48 @@ const normalizeProductList = (payload) => {
   return [];
 };
 
+const runSearchRequest = async ({ path, endpoint, keywordKey, keyword, params = {}, extraParams = {} }) => {
+  const startedAt = performance.now();
+
+  try {
+    const response = await axios.get(`${API_BASE_URL}${path}`, {
+      params: {
+        [keywordKey]: keyword,
+        page: params.page ?? 0,
+        size: params.size ?? 100,
+        ...extraParams,
+      },
+      timeout: 15000,
+      validateStatus: () => true,
+    });
+
+    const durationMs = Math.round(performance.now() - startedAt);
+    const body = response.data;
+
+    return {
+      items: normalizeProductList(body),
+      evidence: {
+        endpoint,
+        status: response.status,
+        durationMs,
+        responseSize: JSON.stringify(body ?? '').length,
+        preview: body,
+      },
+    };
+  } catch (error) {
+    return {
+      items: [],
+      evidence: {
+        endpoint,
+        status: 'NETWORK',
+        durationMs: Math.round(performance.now() - startedAt),
+        responseSize: 0,
+        preview: error.message,
+      },
+    };
+  }
+};
+
 export const productService = {
   getAll: async (params = {}) => {
     try {
@@ -22,44 +64,37 @@ export const productService = {
   },
 
   searchVulnerable: async (keyword, params = {}) => {
-    const startedAt = performance.now();
+    return runSearchRequest({
+      path: '/products/search-vulnerable',
+      endpoint: '/api/products/search-vulnerable',
+      keywordKey: 'keyword',
+      keyword,
+      params,
+    });
+  },
 
-    try {
-      const response = await axios.get(`${API_BASE_URL}/products/search-vulnerable`, {
-        params: {
-          keyword,
-          page: params.page ?? 0,
-          size: params.size ?? 100,
-        },
-        timeout: 15000,
-        validateStatus: () => true,
-      });
+  searchByKeyword: async (keyword, params = {}) => {
+    return runSearchRequest({
+      path: '/products/search',
+      endpoint: '/api/products/search',
+      keywordKey: 'keyWord',
+      keyword,
+      params,
+    });
+  },
 
-      const durationMs = Math.round(performance.now() - startedAt);
-      const body = response.data;
-
-      return {
-        items: normalizeProductList(body),
-        evidence: {
-          endpoint: '/api/products/search-vulnerable',
-          status: response.status,
-          durationMs,
-          responseSize: JSON.stringify(body ?? '').length,
-          preview: body,
-        },
-      };
-    } catch (error) {
-      return {
-        items: [],
-        evidence: {
-          endpoint: '/api/products/search-vulnerable',
-          status: 'NETWORK',
-          durationMs: Math.round(performance.now() - startedAt),
-          responseSize: 0,
-          preview: error.message,
-        },
-      };
-    }
+  filterByKeyword: async (keyword, params = {}) => {
+    return runSearchRequest({
+      path: '/products/filter',
+      endpoint: '/api/products/filter',
+      keywordKey: 'keyWord',
+      keyword,
+      params,
+      extraParams: {
+        sortBy: params.sortBy ?? 'id',
+        direction: params.direction ?? 'asc',
+      },
+    });
   },
 
   getById: async (id) => {

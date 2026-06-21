@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ProductCard from '../../components/ui/ProductCard';
 import { productService } from '../../services/productService';
 import axiosClient from '../../api/axiosClient';
 import './Shop.css';
 
 const ITEMS_PER_PAGE = 12;
+const DEFAULT_SEARCH_MODE = 'search-vulnerable';
+const SUPPORTED_SEARCH_MODES = new Set(['search-vulnerable', 'search', 'filter']);
+
+const normalizeSearchMode = (value) => (
+  SUPPORTED_SEARCH_MODES.has(value) ? value : DEFAULT_SEARCH_MODE
+);
 
 const Shop = () => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +25,10 @@ const Shop = () => {
   const [searchTerm, setSearchTerm] = useState(() => {
     const queryParams = new URLSearchParams(location.search);
     return queryParams.get('q') || '';
+  });
+  const [searchMode, setSearchMode] = useState(() => {
+    const queryParams = new URLSearchParams(location.search);
+    return normalizeSearchMode(queryParams.get('mode'));
   });
   const [serverSearchActive, setServerSearchActive] = useState(false);
   const [sqliEvidence, setSqliEvidence] = useState(null);
@@ -60,12 +71,25 @@ const Shop = () => {
   useEffect(() => {
     let cancelled = false;
     const query = searchTerm.trim();
+    const activeMode = normalizeSearchMode(searchMode);
 
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
         if (query) {
-          const result = await productService.searchVulnerable(query, { size: 100 });
+          let result;
+          if (activeMode === 'search') {
+            result = await productService.searchByKeyword(query, { size: 100 });
+          } else if (activeMode === 'filter') {
+            result = await productService.filterByKeyword(query, {
+              size: 100,
+              sortBy: 'id',
+              direction: 'asc',
+            });
+          } else {
+            result = await productService.searchVulnerable(query, { size: 100 });
+          }
+
           if (!cancelled) {
             setAllProducts(result.items);
             setSqliEvidence(result.evidence);
@@ -100,12 +124,13 @@ const Shop = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchTerm]);
+  }, [searchMode, searchTerm]);
 
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const qParam = queryParams.get('q');
+    const modeParam = normalizeSearchMode(queryParams.get('mode'));
     const brandParam = queryParams.get('brand');
     const categoryParam = queryParams.get('cat');
     const chipsetBrandParam = queryParams.get('chipsetBrand');
@@ -117,7 +142,8 @@ const Shop = () => {
     const psuParam = queryParams.get('psu');
     const priceParam = queryParams.get('price');
 
-    if (qParam !== null && qParam !== searchTerm) setSearchTerm(qParam);
+    setSearchTerm(qParam ?? '');
+    setSearchMode(modeParam);
     if (brandParam) setSelectedBrands([brandParam]); else setSelectedBrands([]);
 
     if (categoryParam) {
@@ -142,7 +168,7 @@ const Shop = () => {
     if (priceParam) setPriceRange(priceParam); else setPriceRange('all');
 
     setDisplayCount(ITEMS_PER_PAGE);
-  }, [location.search, categories, searchTerm]);
+  }, [location.search, categories]);
 
   const toggleArrayItem = (array, item) => array.includes(item) ? array.filter(v => v !== item) : [...array, item];
 
@@ -157,10 +183,12 @@ const Shop = () => {
   const handlePriceChange = (val) => { setPriceRange(val); setDisplayCount(ITEMS_PER_PAGE); };
 
   const handleResetSidebar = () => {
+    navigate('/products', { replace: true });
     setSelectedBrands([]); setSelectedCategories([]); setSelectedLines([]);
     setSelectedChipsets([]); setSelectedVRAMs([]); setSelectedMemTypes([]);
     setSelectedPSUs([]); setSelectedPorts([]); setPriceRange('all');
     setSearchTerm(''); setDisplayCount(ITEMS_PER_PAGE);
+    setSearchMode(DEFAULT_SEARCH_MODE);
     setServerSearchActive(false); setSqliEvidence(null);
   };
 
