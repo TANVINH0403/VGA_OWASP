@@ -15,7 +15,12 @@ const Shop = () => {
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => {
+    const queryParams = new URLSearchParams(location.search);
+    return queryParams.get('q') || '';
+  });
+  const [serverSearchActive, setServerSearchActive] = useState(false);
+  const [sqliEvidence, setSqliEvidence] = useState(null);
   const [sortOrder, setSortOrder] = useState('default');
 
   const [selectedBrands, setSelectedBrands] = useState([]);
@@ -52,9 +57,55 @@ const Shop = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const query = searchTerm.trim();
+
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        if (query) {
+          const result = await productService.searchVulnerable(query, { size: 100 });
+          if (!cancelled) {
+            setAllProducts(result.items);
+            setSqliEvidence(result.evidence);
+            setServerSearchActive(true);
+          }
+        } else {
+          const products = await productService.getAll({ size: 100 });
+          if (!cancelled) {
+            setAllProducts(products);
+            setSqliEvidence(null);
+            setServerSearchActive(false);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAllProducts([]);
+          setSqliEvidence({
+            endpoint: '/api/products/search-vulnerable',
+            status: 'CLIENT',
+            durationMs: 0,
+            responseSize: 0,
+            preview: error.message,
+          });
+          setServerSearchActive(true);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, query ? 350 : 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchTerm]);
+
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
+    const qParam = queryParams.get('q');
     const brandParam = queryParams.get('brand');
     const categoryParam = queryParams.get('cat');
     const chipsetBrandParam = queryParams.get('chipsetBrand');
@@ -66,6 +117,7 @@ const Shop = () => {
     const psuParam = queryParams.get('psu');
     const priceParam = queryParams.get('price');
 
+    if (qParam !== null && qParam !== searchTerm) setSearchTerm(qParam);
     if (brandParam) setSelectedBrands([brandParam]); else setSelectedBrands([]);
 
     if (categoryParam) {
@@ -90,7 +142,7 @@ const Shop = () => {
     if (priceParam) setPriceRange(priceParam); else setPriceRange('all');
 
     setDisplayCount(ITEMS_PER_PAGE);
-  }, [location.search, categories]);
+  }, [location.search, categories, searchTerm]);
 
   const toggleArrayItem = (array, item) => array.includes(item) ? array.filter(v => v !== item) : [...array, item];
 
@@ -109,6 +161,7 @@ const Shop = () => {
     setSelectedChipsets([]); setSelectedVRAMs([]); setSelectedMemTypes([]);
     setSelectedPSUs([]); setSelectedPorts([]); setPriceRange('all');
     setSearchTerm(''); setDisplayCount(ITEMS_PER_PAGE);
+    setServerSearchActive(false); setSqliEvidence(null);
   };
 
   let displayProducts = allProducts.filter((product) => {
@@ -116,7 +169,7 @@ const Shop = () => {
     const descUpper = (product.description || '').toUpperCase();
     const fullText = nameUpper + ' ' + descUpper;
 
-    const matchName = fullText.includes(searchTerm.toUpperCase());
+    const matchName = serverSearchActive || fullText.includes(searchTerm.toUpperCase());
     const matchBrand = selectedBrands.length === 0 || selectedBrands.includes(product.brand?.name);
     const matchCategory = selectedCategories.length === 0 || selectedCategories.includes(product.category?.name);
 
@@ -185,6 +238,12 @@ const Shop = () => {
       setLoadingMore(false);
     }, 400);
   };
+
+  const evidencePreview = sqliEvidence
+    ? (typeof sqliEvidence.preview === 'string'
+        ? sqliEvidence.preview
+        : JSON.stringify(sqliEvidence.preview, null, 2))
+    : '';
 
   return (
     <div className="shop-page">
@@ -355,6 +414,24 @@ const Shop = () => {
                 </select>
               </div>
             </div>
+
+            {sqliEvidence && (
+              <div className="sqli-shop-evidence">
+                <div className="sqli-shop-evidence-header">
+                  <strong>SQLi evidence</strong>
+                  <span>{sqliEvidence.endpoint}</span>
+                </div>
+                <div className="sqli-shop-evidence-grid">
+                  <span>Status</span>
+                  <strong>{sqliEvidence.status}</strong>
+                  <span>Duration</span>
+                  <strong>{sqliEvidence.durationMs} ms</strong>
+                  <span>Response size</span>
+                  <strong>{sqliEvidence.responseSize}</strong>
+                </div>
+                <pre>{evidencePreview.slice(0, 2400)}</pre>
+              </div>
+            )}
 
             {loading ? (
               <div className="shop-loading">

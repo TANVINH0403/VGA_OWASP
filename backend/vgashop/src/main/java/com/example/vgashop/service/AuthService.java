@@ -148,8 +148,8 @@ public class AuthService {
         if (Boolean.FALSE.equals(user.getStatus()))
             throw new RuntimeException("Account is disabled. Please contact support.");
 
-        // if (!passwordEncoder.matches(password, user.getPassword()))
-        //     throw new RuntimeException("Invalid username or password");
+        if (!passwordEncoder.matches(password, user.getPassword()))
+            throw new RuntimeException("Invalid username or password");
 
         return new AuthResponse(jwtUtil.generateToken(user.getUsername(), user.getRole()),
                 user.getUsername(), user.getEmail(), user.getRole().name(), user.getId(),

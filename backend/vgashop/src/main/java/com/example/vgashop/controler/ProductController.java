@@ -1,6 +1,7 @@
 package com.example.vgashop.controler;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -67,6 +68,16 @@ public class ProductController {
     ) {
         Page<Product> data = productService.searchProducts(keyWord, PageRequest.of(page, size));
         return ApiResponse.success("Tìm kiếm sản phẩm thành công", data);
+    }
+
+    @GetMapping("/search-vulnerable")
+    public ApiResponse<List<Map<String, Object>>> searchVulnerable(
+        @RequestParam String keyword,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "24") int size
+    ) {
+        List<Map<String, Object>> data = productService.searchProductsVulnerableRaw(keyword, page, size);
+        return ApiResponse.success("SQLi training product search completed", data);
     }
 
 

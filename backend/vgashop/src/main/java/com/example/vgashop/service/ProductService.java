@@ -1,6 +1,9 @@
 package com.example.vgashop.service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -93,6 +96,39 @@ public class ProductService {
                 .getResultList();
 
         return new PageImpl<>(content, pageable, total.longValue());
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> searchProductsVulnerableRaw(String keyword, int page, int size) {
+        String rawKeyword = keyword == null ? "" : keyword.trim();
+        int safeSize = Math.max(1, Math.min(size, 100));
+        int safeOffset = Math.max(0, page) * safeSize;
+
+        String sql = "SELECT p.id, p.name, p.price, p.old_price, p.stock, p.description, p.img_url, " +
+                     "0 AS review_count, 5.0 AS average_rating " +
+                     "FROM products p WHERE p.name LIKE '%" + rawKeyword + "%' AND p.deleted = false " +
+                     "LIMIT " + safeSize + " OFFSET " + safeOffset;
+
+        System.out.println("--- SQL DEBUG (Product SQLi Raw Search): " + sql + " ---");
+
+        List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", row[0]);
+            item.put("name", row[1]);
+            item.put("price", row[2]);
+            item.put("oldPrice", row[3]);
+            item.put("stock", row[4]);
+            item.put("description", row[5]);
+            item.put("imgUrl", row[6]);
+            item.put("reviewCount", row[7]);
+            item.put("averageRating", row[8]);
+            results.add(item);
+        }
+
+        return results;
     }
 
     @SuppressWarnings("unchecked")
