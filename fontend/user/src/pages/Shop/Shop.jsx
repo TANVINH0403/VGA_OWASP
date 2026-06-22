@@ -272,6 +272,11 @@ const Shop = () => {
         ? sqliEvidence.preview
         : JSON.stringify(sqliEvidence.preview, null, 2))
     : '';
+  const evidenceType = sqliEvidence?.durationMs >= 4500
+    ? 'Time-based indicator'
+    : sqliEvidence?.status >= 500
+      ? 'Error-based indicator'
+      : 'Boolean/Union indicator';
 
   return (
     <div className="shop-page">
@@ -449,6 +454,12 @@ const Shop = () => {
                   <strong>SQLi evidence</strong>
                   <span>{sqliEvidence.endpoint}</span>
                 </div>
+                <div className="sqli-shop-evidence-request">
+                  <span>Payload</span>
+                  <code>{sqliEvidence.payload}</code>
+                  <span>Request URL</span>
+                  <code>{sqliEvidence.requestUrl}</code>
+                </div>
                 <div className="sqli-shop-evidence-grid">
                   <span>Status</span>
                   <strong>{sqliEvidence.status}</strong>
@@ -456,6 +467,10 @@ const Shop = () => {
                   <strong>{sqliEvidence.durationMs} ms</strong>
                   <span>Response size</span>
                   <strong>{sqliEvidence.responseSize}</strong>
+                  <span>Records</span>
+                  <strong>{sqliEvidence.recordCount}</strong>
+                  <span>Evidence type</span>
+                  <strong>{evidenceType}</strong>
                 </div>
                 <pre>{evidencePreview.slice(0, 2400)}</pre>
               </div>

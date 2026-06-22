@@ -593,9 +593,36 @@ details.sidebar-section[open] .sidebar-title {
   word-break: break-word;
 }
 
+.sqli-shop-evidence-request {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #222;
+  background: #101010;
+}
+
+.sqli-shop-evidence-request span {
+  color: #999;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sqli-shop-evidence-request code {
+  display: block;
+  min-width: 0;
+  color: #f4f4f5;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .sqli-shop-evidence-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border-bottom: 1px solid #222;
 }
 
@@ -630,6 +657,10 @@ details.sidebar-section[open] .sidebar-title {
 @media (max-width: 640px) {
   .sqli-shop-evidence-header {
     flex-direction: column;
+  }
+
+  .sqli-shop-evidence-request {
+    grid-template-columns: 1fr;
   }
 
   .sqli-shop-evidence-grid {

@@ -12,29 +12,34 @@ const normalizeProductList = (payload) => {
 
 const runSearchRequest = async ({ path, endpoint, keywordKey, keyword, params = {}, extraParams = {} }) => {
   const startedAt = performance.now();
+  const requestParams = {
+    [keywordKey]: keyword,
+    page: params.page ?? 0,
+    size: params.size ?? 100,
+    ...extraParams,
+  };
 
   try {
     const response = await axios.get(`${API_BASE_URL}${path}`, {
-      params: {
-        [keywordKey]: keyword,
-        page: params.page ?? 0,
-        size: params.size ?? 100,
-        ...extraParams,
-      },
+      params: requestParams,
       timeout: 15000,
       validateStatus: () => true,
     });
 
     const durationMs = Math.round(performance.now() - startedAt);
     const body = response.data;
+    const items = normalizeProductList(body);
 
     return {
-      items: normalizeProductList(body),
+      items,
       evidence: {
         endpoint,
+        requestUrl: `${API_BASE_URL}${path}?${new URLSearchParams(requestParams).toString()}`,
+        payload: keyword,
         status: response.status,
         durationMs,
         responseSize: JSON.stringify(body ?? '').length,
+        recordCount: items.length,
         preview: body,
       },
     };
@@ -43,9 +48,12 @@ const runSearchRequest = async ({ path, endpoint, keywordKey, keyword, params = 
       items: [],
       evidence: {
         endpoint,
+        requestUrl: `${API_BASE_URL}${path}?${new URLSearchParams(requestParams).toString()}`,
+        payload: keyword,
         status: 'NETWORK',
         durationMs: Math.round(performance.now() - startedAt),
         responseSize: 0,
+        recordCount: 0,
         preview: error.message,
       },
     };
