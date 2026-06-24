@@ -1,21 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ProductCard from '../../components/ui/ProductCard';
 import { productService } from '../../services/productService';
 import axiosClient from '../../api/axiosClient';
 import './Shop.css';
 
 const ITEMS_PER_PAGE = 12;
+const DEFAULT_SEARCH_MODE = 'search-vulnerable';
+const SUPPORTED_SEARCH_MODES = new Set(['search-vulnerable', 'search', 'filter']);
+
+const normalizeSearchMode = (value) => (
+  SUPPORTED_SEARCH_MODES.has(value) ? value : DEFAULT_SEARCH_MODE
+);
 
 const Shop = () => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => {
+    const queryParams = new URLSearchParams(location.search);
+    return queryParams.get('q') || '';
+  });
+  const [searchMode, setSearchMode] = useState(() => {
+    const queryParams = new URLSearchParams(location.search);
+    return normalizeSearchMode(queryParams.get('mode'));
+  });
+  const [serverSearchActive, setServerSearchActive] = useState(false);
+  const [sqliEvidence, setSqliEvidence] = useState(null);
   const [sortOrder, setSortOrder] = useState('default');
 
   const [selectedBrands, setSelectedBrands] = useState([]);
@@ -52,9 +68,69 @@ const Shop = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const query = searchTerm.trim();
+    const activeMode = normalizeSearchMode(searchMode);
+
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        if (query) {
+          let result;
+          if (activeMode === 'search') {
+            result = await productService.searchByKeyword(query, { size: 100 });
+          } else if (activeMode === 'filter') {
+            result = await productService.filterByKeyword(query, {
+              size: 100,
+              sortBy: 'id',
+              direction: 'asc',
+            });
+          } else {
+            result = await productService.searchVulnerable(query, { size: 100 });
+          }
+
+          if (!cancelled) {
+            setAllProducts(result.items);
+            setSqliEvidence(result.evidence);
+            setServerSearchActive(true);
+          }
+        } else {
+          const products = await productService.getAll({ size: 100 });
+          if (!cancelled) {
+            setAllProducts(products);
+            setSqliEvidence(null);
+            setServerSearchActive(false);
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAllProducts([]);
+          setSqliEvidence({
+            endpoint: '/api/products/search-vulnerable',
+            status: 'CLIENT',
+            durationMs: 0,
+            responseSize: 0,
+            preview: error.message,
+          });
+          setServerSearchActive(true);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, query ? 350 : 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchMode, searchTerm]);
+
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
+    const qParam = queryParams.get('q');
+    const modeParam = normalizeSearchMode(queryParams.get('mode'));
     const brandParam = queryParams.get('brand');
     const categoryParam = queryParams.get('cat');
     const chipsetBrandParam = queryParams.get('chipsetBrand');
@@ -66,6 +142,8 @@ const Shop = () => {
     const psuParam = queryParams.get('psu');
     const priceParam = queryParams.get('price');
 
+    setSearchTerm(qParam ?? '');
+    setSearchMode(modeParam);
     if (brandParam) setSelectedBrands([brandParam]); else setSelectedBrands([]);
 
     if (categoryParam) {
@@ -105,10 +183,13 @@ const Shop = () => {
   const handlePriceChange = (val) => { setPriceRange(val); setDisplayCount(ITEMS_PER_PAGE); };
 
   const handleResetSidebar = () => {
+    navigate('/products', { replace: true });
     setSelectedBrands([]); setSelectedCategories([]); setSelectedLines([]);
     setSelectedChipsets([]); setSelectedVRAMs([]); setSelectedMemTypes([]);
     setSelectedPSUs([]); setSelectedPorts([]); setPriceRange('all');
     setSearchTerm(''); setDisplayCount(ITEMS_PER_PAGE);
+    setSearchMode(DEFAULT_SEARCH_MODE);
+    setServerSearchActive(false); setSqliEvidence(null);
   };
 
   let displayProducts = allProducts.filter((product) => {
@@ -116,7 +197,7 @@ const Shop = () => {
     const descUpper = (product.description || '').toUpperCase();
     const fullText = nameUpper + ' ' + descUpper;
 
-    const matchName = fullText.includes(searchTerm.toUpperCase());
+    const matchName = serverSearchActive || fullText.includes(searchTerm.toUpperCase());
     const matchBrand = selectedBrands.length === 0 || selectedBrands.includes(product.brand?.name);
     const matchCategory = selectedCategories.length === 0 || selectedCategories.includes(product.category?.name);
 
@@ -185,6 +266,17 @@ const Shop = () => {
       setLoadingMore(false);
     }, 400);
   };
+
+  const evidencePreview = sqliEvidence
+    ? (typeof sqliEvidence.preview === 'string'
+        ? sqliEvidence.preview
+        : JSON.stringify(sqliEvidence.preview, null, 2))
+    : '';
+  const evidenceType = sqliEvidence?.durationMs >= 4500
+    ? 'Time-based indicator'
+    : sqliEvidence?.status >= 500
+      ? 'Error-based indicator'
+      : 'Boolean/Union indicator';
 
   return (
     <div className="shop-page">
@@ -355,6 +447,34 @@ const Shop = () => {
                 </select>
               </div>
             </div>
+
+            {sqliEvidence && (
+              <div className="sqli-shop-evidence">
+                <div className="sqli-shop-evidence-header">
+                  <strong>SQLi evidence</strong>
+                  <span>{sqliEvidence.endpoint}</span>
+                </div>
+                <div className="sqli-shop-evidence-request">
+                  <span>Payload</span>
+                  <code>{sqliEvidence.payload}</code>
+                  <span>Request URL</span>
+                  <code>{sqliEvidence.requestUrl}</code>
+                </div>
+                <div className="sqli-shop-evidence-grid">
+                  <span>Status</span>
+                  <strong>{sqliEvidence.status}</strong>
+                  <span>Duration</span>
+                  <strong>{sqliEvidence.durationMs} ms</strong>
+                  <span>Response size</span>
+                  <strong>{sqliEvidence.responseSize}</strong>
+                  <span>Records</span>
+                  <strong>{sqliEvidence.recordCount}</strong>
+                  <span>Evidence type</span>
+                  <strong>{evidenceType}</strong>
+                </div>
+                <pre>{evidencePreview.slice(0, 2400)}</pre>
+              </div>
+            )}
 
             {loading ? (
               <div className="shop-loading">

@@ -21,7 +21,6 @@ import com.example.vgashop.entity.User;
 import com.example.vgashop.entity.Product;
 import com.example.vgashop.entity.OrderStatus;
 import com.example.vgashop.repository.OrderItemRepository;
-import jakarta.persistence.EntityManager;
 
 @RestController
 @RequestMapping("/api/reviews")
@@ -32,7 +31,6 @@ public class ReviewController {
     @Autowired private UserRepository userRepository;
     @Autowired private BlogRepository blogRepository;
     @Autowired private OrderItemRepository orderItemRepository;
-    @Autowired private EntityManager entityManager;
 
 
     private Map<String, Object> toDto(Review r) {
@@ -108,19 +106,6 @@ public class ReviewController {
     }
 
 
-    // Cố ý tạo SQL Injection endpoint cho mục đích đào tạo bảo mật (OWASP A03)
-    // Payload mẫu: ' OR '1'='1  hoặc '; DROP TABLE reviews; --
-    @SuppressWarnings("unchecked")
-    @GetMapping("/search-vulnerable")
-    public ResponseEntity<List<Review>> searchReviewsVulnerable(@RequestParam String keyword) {
-        // Cộng chuỗi trực tiếp vào câu SQL → SQL Injection
-        String sql = "SELECT * FROM reviews WHERE comment LIKE '%" + keyword + "%'";
-        List<Review> results = entityManager.createNativeQuery(sql, Review.class).getResultList();
-        return ResponseEntity.ok(results);
-    }
-
-
-    
     @GetMapping("/can-review/{productId}")
     public ResponseEntity<Boolean> canReview(@PathVariable Long productId, Principal principal) {
         if (principal == null) return ResponseEntity.ok(false);
