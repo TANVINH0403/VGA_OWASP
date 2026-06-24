@@ -23,10 +23,14 @@ import jakarta.persistence.NoResultException;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class UserService {
+
+    private static final Set<String> USER_SORT_COLUMNS = Set.of(
+            "id", "username", "email", "full_name", "created_at", "updated_at");
 
     private final BCryptPasswordEncoder passwordEncoder;
 
@@ -35,6 +39,18 @@ public class UserService {
 
     public UserService() {
         this.passwordEncoder = new BCryptPasswordEncoder();
+    }
+
+    private String normalizeUserSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return "id";
+        }
+        String normalized = sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase();
+        return USER_SORT_COLUMNS.contains(normalized) ? normalized : "id";
+    }
+
+    private String normalizeSortDirection(String direction) {
+        return "desc".equalsIgnoreCase(direction) ? "DESC" : "ASC";
     }
 
     // Lấy user an toàn bằng Native SQL (tái sử dụng nội bộ)
@@ -160,8 +176,8 @@ public class UserService {
         String countSql = "SELECT COUNT(*) FROM users WHERE deleted = false";
         Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
 
-        String safeSort = sortBy.matches("^[a-zA-Z0-9_]+$") ? sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase() : "id";
-        String safeDir = direction.equalsIgnoreCase("desc") ? "DESC" : "ASC";
+        String safeSort = normalizeUserSort(sortBy);
+        String safeDir = normalizeSortDirection(direction);
         
         String fetchSql = "SELECT * FROM users WHERE deleted = false ORDER BY " + safeSort + " " + safeDir + " LIMIT :limit OFFSET :offset";
         
@@ -188,9 +204,9 @@ public class UserService {
 //     //         "AND (LOWER(username) LIKE LOWER(:keyword) " +
 //     //         "OR LOWER(email) LIKE LOWER(:keyword))";
 
-//     String countSql = "SELECT COUNT(*) FROM users WHERE username LIKE '%" + keyWord + "%'";
+//     Vi du cu da bi loai bo: khong ghep keyword truc tiep vao SQL.
 //     String fetchSql = "SELECT * FROM users WHERE deleted = false " +
-//                       "AND (username LIKE '%" + keyWord + "%' OR email LIKE '%" + keyWord + "%') " +
+//                       "AND (username LIKE :keyword OR email LIKE :keyword) " +
 //                       "ORDER BY username ASC";
 
 //                       // Dòng này sẽ in ra Terminal câu lệnh SQL thực tế đang chạy
@@ -223,27 +239,31 @@ public class UserService {
 
 @SuppressWarnings("unchecked")
 public Page<User> searchUsers(String keyWord, int page, int size) {
-    // 1. Xử lý giá trị mặc định để tránh null
-    String safeKeyword = (keyWord == null || keyWord.trim().isEmpty()) ? "" : keyWord.trim();
+    // Bind keyword, limit va offset bang tham so de tranh SQL Injection.
+    String searchParam = (keyWord == null || keyWord.trim().isEmpty()) ? "%" : "%" + keyWord.trim() + "%";
+    int safeSize = Math.max(1, Math.min(size, 100));
+    int safePage = Math.max(0, page);
 
-    // 2. NỐI CHUỖI TRỰC TIẾP (Đây chính là lỗ hổng)
-    String countSql = "SELECT COUNT(*) FROM users WHERE username LIKE '%" + safeKeyword + "%'";
+    String countSql = "SELECT COUNT(*) FROM users WHERE deleted = false " +
+                      "AND (username LIKE :keyword OR email LIKE :keyword)";
     String fetchSql = "SELECT * FROM users WHERE deleted = false " +
-                      "AND (username LIKE '%" + safeKeyword + "%' OR email LIKE '%" + safeKeyword + "%') " +
+                      "AND (username LIKE :keyword OR email LIKE :keyword) " +
                       "ORDER BY username ASC " +
-                      "LIMIT " + size + " OFFSET " + (page * size);
+                      "LIMIT :limit OFFSET :offset";
 
     System.out.println("--- SQL DEBUG: " + fetchSql + " ---");
 
-    // 3. Thực thi query mà KHÔNG DÙNG .setParameter cho keyword
-    // Lưu ý: limit và offset vẫn nên để tham số nếu muốn, 
-    // nhưng ở đây ta tập trung vào lỗi ở keyword.
-    Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
+    Number total = (Number) entityManager.createNativeQuery(countSql)
+            .setParameter("keyword", searchParam)
+            .getSingleResult();
 
     List<User> content = entityManager.createNativeQuery(fetchSql, User.class)
+            .setParameter("keyword", searchParam)
+            .setParameter("limit", safeSize)
+            .setParameter("offset", safePage * safeSize)
             .getResultList();
 
-    return new PageImpl<>(content, PageRequest.of(page, size), total.longValue());
+    return new PageImpl<>(content, PageRequest.of(safePage, safeSize), total.longValue());
 }
     public User getUserById(Long id) {
         String sql = "SELECT * FROM users WHERE id = :id AND deleted = false";

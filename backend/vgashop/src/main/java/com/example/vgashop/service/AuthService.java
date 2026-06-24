@@ -1,5 +1,6 @@
 package com.example.vgashop.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,22 +14,21 @@ import com.example.vgashop.entity.User;
 import com.example.vgashop.exception.DuplicateResourceException;
 import com.example.vgashop.exception.ResourceNotFoundException;
 import com.example.vgashop.security.JwtUtil;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
-import org.springframework.beans.factory.annotation.Autowired;
-import java.util.List;
 
 @Service
 public class AuthService {
 
-    private final JwtUtil              jwtUtil;
+    private final JwtUtil jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder;
 
     @Autowired
     private EntityManager entityManager;
 
     public AuthService(JwtUtil jwtUtil) {
-        this.jwtUtil         = jwtUtil;
+        this.jwtUtil = jwtUtil;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -46,42 +46,17 @@ public class AuthService {
         return count.intValue() > 0;
     }
 
-    // ĐOẠN CODE BỊ SỬA ĐỂ TẠO LỖI SQLi
     private User findByUsername(String username) {
         try {
-            // Cộng chuỗi trực tiếp biến 'username' vào câu lệnh SQL
-            String sql = "SELECT * FROM users WHERE username = '" + username + "'";
-            
-            return (User) entityManager.createNativeQuery(sql, User.class)
+            return (User) entityManager
+                    .createNativeQuery("SELECT * FROM users WHERE username = :username AND deleted = false", User.class)
+                    .setParameter("username", username)
                     .getSingleResult();
         } catch (NoResultException e) {
             return null;
         }
     }
 
-        // HÀM CỐ TÌNH GÂY LỖI BYPASS LOGIN CHO LAB OWASP
-    private User findByUsernameAndPasswordInsecure(String username, String password) {
-        try {
-            // Lỗ hổng ghép chuỗi cả username và password
-            String sql = "SELECT * FROM users WHERE username = '" + username + "' AND password = '" + password + "'";
-            List<User> users = entityManager.createNativeQuery(sql, User.class)
-                    .getResultList();
-            return users.isEmpty() ? null : users.get(0);
-        } catch (NoResultException e) {
-            return null;
-        }
-    }
-
-    private boolean isSqlInjectionPayload(String value) {
-        if (value == null) return false;
-        String lower = value.toLowerCase();
-        return lower.contains("' or ")
-                || lower.contains("\" or ")
-                || lower.contains("--")
-                || lower.contains("/*");
-    }
-
-    
     private User findByEmail(String email) {
         try {
             return (User) entityManager.createNativeQuery("SELECT * FROM users WHERE email = :email", User.class)
@@ -94,10 +69,12 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest req) {
-        if (existsByEmail(req.getEmail()))
+        if (existsByEmail(req.getEmail())) {
             throw new DuplicateResourceException("Email is already in use");
-        if (existsByUsername(req.getUsername()))
+        }
+        if (existsByUsername(req.getUsername())) {
             throw new DuplicateResourceException("Username is already taken");
+        }
 
         String insertSql = "INSERT INTO users (username, email, password, full_name, role, status, deleted) " +
                            "VALUES (:username, :email, :password, :fullName, :role, true, false)";
@@ -111,7 +88,7 @@ public class AuthService {
                 .executeUpdate();
 
         User saved = findByUsername(req.getUsername());
-        
+
         return new AuthResponse(jwtUtil.generateToken(saved.getUsername(), saved.getRole()),
                 saved.getUsername(), saved.getEmail(), saved.getRole().name(), saved.getId(),
                 "Registration successful");
@@ -119,10 +96,12 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(UserDTO dto) {
-        if (existsByUsername(dto.getUsername()))
+        if (existsByUsername(dto.getUsername())) {
             throw new DuplicateResourceException("Username is already taken");
-        if (existsByEmail(dto.getEmail()))
+        }
+        if (existsByEmail(dto.getEmail())) {
             throw new DuplicateResourceException("Email is already in use");
+        }
 
         String roleStr = dto.getRole() != null ? dto.getRole().toUpperCase() : Role.USER.name();
 
@@ -147,22 +126,23 @@ public class AuthService {
     }
 
     public AuthResponse login(String username, String password) {
-        User user = isSqlInjectionPayload(username)
-                ? findByUsernameAndPasswordInsecure(username, password)
-                : findByUsername(username);
-        
+        User user = findByUsername(username);
+
         if (user == null) {
             throw new ResourceNotFoundException("Invalid username or password");
         }
 
-        if (Boolean.TRUE.equals(user.isDeleted()))
+        if (Boolean.TRUE.equals(user.isDeleted())) {
             throw new RuntimeException("Account does not exist or has been removed");
+        }
 
-        if (Boolean.FALSE.equals(user.getStatus()))
+        if (Boolean.FALSE.equals(user.getStatus())) {
             throw new RuntimeException("Account is disabled. Please contact support.");
+        }
 
-        if (!isSqlInjectionPayload(username) && !passwordEncoder.matches(password, user.getPassword()))
+        if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("Invalid username or password");
+        }
 
         return new AuthResponse(jwtUtil.generateToken(user.getUsername(), user.getRole()),
                 user.getUsername(), user.getEmail(), user.getRole().name(), user.getId(),
@@ -174,10 +154,12 @@ public class AuthService {
         User user = findByEmail(req.getEmail());
 
         if (user == null) {
-            String prefix   = req.getEmail().split("@")[0];
+            String prefix = req.getEmail().split("@")[0];
             String username = prefix;
-            int    counter  = 1;
-            while (existsByUsername(username)) username = prefix + counter++;
+            int counter = 1;
+            while (existsByUsername(username)) {
+                username = prefix + counter++;
+            }
 
             String insertSql = "INSERT INTO users (username, email, password, full_name, role, status, deleted) " +
                                "VALUES (:username, :email, :password, :fullName, :role, true, false)";
@@ -189,11 +171,10 @@ public class AuthService {
                     .setParameter("fullName", req.getName())
                     .setParameter("role", Role.USER.name())
                     .executeUpdate();
-                    
+
             user = findByUsername(username);
-        } else {
-            if (Boolean.FALSE.equals(user.getStatus()))
-                throw new RuntimeException("Account is disabled");
+        } else if (Boolean.FALSE.equals(user.getStatus())) {
+            throw new RuntimeException("Account is disabled");
         }
 
         return new AuthResponse(jwtUtil.generateToken(user.getUsername(), user.getRole()),

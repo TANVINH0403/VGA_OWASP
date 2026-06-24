@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -26,6 +27,9 @@ import jakarta.persistence.NoResultException;
 @Service
 public class ProductService {
 
+    private static final Set<String> PRODUCT_SORT_COLUMNS = Set.of(
+            "id", "name", "price", "old_price", "stock", "created_at", "updated_at", "display_order");
+
     private final CategoryService categoryService;
     private final BrandService brandService;
 
@@ -35,6 +39,18 @@ public class ProductService {
     public ProductService(BrandService brandService, CategoryService categoryService) {
         this.brandService = brandService;
         this.categoryService = categoryService;
+    }
+
+    private String normalizeProductSort(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return "id";
+        }
+        String normalized = sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase();
+        return PRODUCT_SORT_COLUMNS.contains(normalized) ? normalized : "id";
+    }
+
+    private String normalizeSortDirection(String direction) {
+        return "desc".equalsIgnoreCase(direction) ? "DESC" : "ASC";
     }
 
     private boolean existsByName(String name) {
@@ -56,8 +72,8 @@ public class ProductService {
         String countSql = "SELECT COUNT(*) FROM products WHERE deleted = false";
         Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
 
-        String safeSort = sortBy.matches("^[a-zA-Z0-9_]+$") ? sortBy.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase() : "id";
-        String safeDir = direction.equalsIgnoreCase("desc") ? "DESC" : "ASC";
+        String safeSort = normalizeProductSort(sortBy);
+        String safeDir = normalizeSortDirection(direction);
         
         String fetchSql = "SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE deleted = false ORDER BY " + safeSort + " " + safeDir + " LIMIT :limit OFFSET :offset";
         
@@ -82,17 +98,22 @@ public class ProductService {
 
     @SuppressWarnings("unchecked")
     public Page<Product> searchProducts(String keyWord, Pageable pageable) {
-        // NỐI CHUỖI TRỰC TIẾP (Lỗ hổng SQL Injection)
-        String safeKeyword = (keyWord == null || keyWord.trim().isEmpty()) ? "" : keyWord.trim();
+        // Keyword duoc bind bang tham so de tranh SQL Injection.
+        String searchParam = (keyWord == null || keyWord.trim().isEmpty()) ? "%" : "%" + keyWord.trim() + "%";
 
-        String countSql = "SELECT COUNT(*) FROM products WHERE name LIKE '%" + safeKeyword + "%'";
-        Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
+        String countSql = "SELECT COUNT(*) FROM products WHERE deleted = false AND name LIKE :keyword";
+        Number total = (Number) entityManager.createNativeQuery(countSql)
+                .setParameter("keyword", searchParam)
+                .getSingleResult();
 
-        String fetchSql = "SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE name LIKE '%" + safeKeyword + "%' LIMIT " + pageable.getPageSize() + " OFFSET " + pageable.getOffset();
+        String fetchSql = "SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE p.deleted = false AND p.name LIKE :keyword LIMIT :limit OFFSET :offset";
 
         System.out.println("--- SQL DEBUG (Product Search): " + fetchSql + " ---");
 
         List<Product> content = entityManager.createNativeQuery(fetchSql, Product.class)
+                .setParameter("keyword", searchParam)
+                .setParameter("limit", pageable.getPageSize())
+                .setParameter("offset", pageable.getOffset())
                 .getResultList();
 
         return new PageImpl<>(content, pageable, total.longValue());
@@ -103,15 +124,20 @@ public class ProductService {
         String rawKeyword = keyword == null ? "" : keyword.trim();
         int safeSize = Math.max(1, Math.min(size, 100));
         int safeOffset = Math.max(0, page) * safeSize;
+        String searchParam = "%" + rawKeyword + "%";
 
         String sql = "SELECT p.id, p.name, p.price, p.old_price, p.stock, p.description, p.img_url, " +
                      "0 AS review_count, 5.0 AS average_rating " +
-                     "FROM products p WHERE p.name LIKE '%" + rawKeyword + "%' AND p.deleted = false " +
-                     "LIMIT " + safeSize + " OFFSET " + safeOffset;
+                     "FROM products p WHERE p.name LIKE :keyword AND p.deleted = false " +
+                     "LIMIT :limit OFFSET :offset";
 
         System.out.println("--- SQL DEBUG (Product SQLi Raw Search): " + sql + " ---");
 
-        List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
+        List<Object[]> rows = entityManager.createNativeQuery(sql)
+                .setParameter("keyword", searchParam)
+                .setParameter("limit", safeSize)
+                .setParameter("offset", safeOffset)
+                .getResultList();
         List<Map<String, Object>> results = new ArrayList<>();
 
         for (Object[] row : rows) {
@@ -134,17 +160,20 @@ public class ProductService {
     @SuppressWarnings("unchecked")
     public Page<Product> filterByBrand(String brand) {
         try {
-            // LỖI BẢO MẬT: Nối chuỗi trực tiếp (Error-Based SQLi)
-            String countSql = "SELECT COUNT(p.*) FROM products p JOIN brands b ON p.brand_id = b.id WHERE b.name = '" + brand + "'";
-            Number total = (Number) entityManager.createNativeQuery(countSql).getSingleResult();
+            // Brand duoc bind bang tham so de tranh Error-Based SQLi.
+            String countSql = "SELECT COUNT(p.*) FROM products p JOIN brands b ON p.brand_id = b.id WHERE p.deleted = false AND b.name = :brand";
+            Number total = (Number) entityManager.createNativeQuery(countSql)
+                    .setParameter("brand", brand)
+                    .getSingleResult();
 
-            String fetchSql = "SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p JOIN brands b ON p.brand_id = b.id WHERE b.name = '" + brand + "'";
-            List<Product> content = entityManager.createNativeQuery(fetchSql, Product.class).getResultList();
+            String fetchSql = "SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p JOIN brands b ON p.brand_id = b.id WHERE p.deleted = false AND b.name = :brand";
+            List<Product> content = entityManager.createNativeQuery(fetchSql, Product.class)
+                    .setParameter("brand", brand)
+                    .getResultList();
 
             return new PageImpl<>(content, Pageable.unpaged(), total.longValue());
         } catch (Exception e) {
-            // LỖI: Cố tình trả về chi tiết lỗi hệ thống DB ra ngoài
-            throw new RuntimeException("Database Error: " + e.getMessage());
+            throw new RuntimeException("Khong the loc san pham theo thuong hieu");
         }
     }
 
@@ -174,26 +203,38 @@ public class ProductService {
         String keyWord, List<Long> brandId, Double minPrice, Double maxPrice,
         int page, int size, String sortBy, String direction
     ) {
-        // NỐI CHUỖI TRỰC TIẾP keyword (Lỗ hổng SQL Injection)
-        String safeKeyword = (keyWord == null) ? "" : keyWord.trim();
+        // Cac gia tri loc duoc bind bang tham so; cot sort di qua whitelist.
+        String searchParam = (keyWord == null || keyWord.trim().isEmpty()) ? "%" : "%" + keyWord.trim() + "%";
         minPrice = (minPrice == null) ? 0.0 : minPrice;
         maxPrice = (maxPrice == null) ? Double.MAX_VALUE : maxPrice;
+        int safeSize = Math.max(1, Math.min(size, 100));
+        int safePage = Math.max(0, page);
+        String safeSort = normalizeProductSort(sortBy);
+        String safeDir = normalizeSortDirection(direction);
 
-        // Không validate sortBy và direction
-        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM products WHERE name LIKE '%" + safeKeyword + "%' AND price BETWEEN " + minPrice + " AND " + maxPrice);
-        StringBuilder fetchSql = new StringBuilder("SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE name LIKE '%" + safeKeyword + "%' AND price BETWEEN " + minPrice + " AND " + maxPrice);
+        StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM products WHERE deleted = false AND name LIKE :keyword AND price BETWEEN :minPrice AND :maxPrice");
+        StringBuilder fetchSql = new StringBuilder("SELECT p.*, (SELECT COUNT(r.id) FROM reviews r WHERE r.product_id = p.id) as \"reviewCount\", (SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.product_id = p.id) as \"averageRating\" FROM products p WHERE p.deleted = false AND p.name LIKE :keyword AND p.price BETWEEN :minPrice AND :maxPrice");
         
         if (brandId != null && !brandId.isEmpty()) {
             countSql.append(" AND brand_id IN (:brandIds)");
             fetchSql.append(" AND brand_id IN (:brandIds)");
         }
         
-        fetchSql.append(" ORDER BY ").append(sortBy).append(" ").append(direction).append(" LIMIT " + size + " OFFSET " + (page * size));
+        fetchSql.append(" ORDER BY ").append(safeSort).append(" ").append(safeDir).append(" LIMIT :limit OFFSET :offset");
 
         System.out.println("--- SQL DEBUG (Product Filter): " + fetchSql + " ---");
 
         var countQuery = entityManager.createNativeQuery(countSql.toString());
         var fetchQuery = entityManager.createNativeQuery(fetchSql.toString(), Product.class);
+
+        countQuery.setParameter("keyword", searchParam);
+        countQuery.setParameter("minPrice", minPrice);
+        countQuery.setParameter("maxPrice", maxPrice);
+        fetchQuery.setParameter("keyword", searchParam);
+        fetchQuery.setParameter("minPrice", minPrice);
+        fetchQuery.setParameter("maxPrice", maxPrice);
+        fetchQuery.setParameter("limit", safeSize);
+        fetchQuery.setParameter("offset", safePage * safeSize);
 
         if (brandId != null && !brandId.isEmpty()) {
             countQuery.setParameter("brandIds", brandId);
@@ -203,8 +244,8 @@ public class ProductService {
         Number total = (Number) countQuery.getSingleResult();
         List<Product> content = fetchQuery.getResultList();
 
-        Sort sort = direction.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
-        return new PageImpl<>(content, PageRequest.of(page, size, sort), total.longValue());
+        Sort sort = "DESC".equals(safeDir) ? Sort.by(safeSort).descending() : Sort.by(safeSort).ascending();
+        return new PageImpl<>(content, PageRequest.of(safePage, safeSize, sort), total.longValue());
     }
 
     @Transactional
