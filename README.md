@@ -13,6 +13,41 @@ VGA Store OWASP Lab là ứng dụng thương mại điện tử bán VGA/card �
 | Backend API | Java 17, Spring Boot 3.3, Spring Security, JPA | `8082` |
 | Database | PostgreSQL 17 | `4434` |
 
+## Kiến Trúc Docker
+
+```text
+[Máy tấn công / Kiểm thử (Trình duyệt, Postman, Burp Suite)]
+        |
+        |  Giao thức HTTP - Port 4175/4176/8082
+        v
++-------------------------------------------------------------+
+|                     Mạng nội bộ Docker                      |
+|                                                             |
+|   +--------------------+          +--------------------+    |
+|   |   User Frontend    |          |   Admin Frontend   |    |
+|   |   React + Vite     |          |   React + Vite     |    |
+|   |   Port: 4175       |          |   Port: 4176       |    |
+|   +---------+----------+          +----------+---------+    |
+|             |                                |              |
+|             +----------------+---------------+              |
+|                              |                              |
+|                              v                              |
+|                    +--------------------+                   |
+|                    |    Backend API     |                   |
+|                    |    Spring Boot     |                   |
+|                    |    Port: 8082      |                   |
+|                    +---------+----------+                   |
+|                              |                              |
+|                              v                              |
+|                    +--------------------+                   |
+|                    |      Database      |                   |
+|                    |     PostgreSQL     |                   |
+|                    |     Port: 4434     |                   |
+|                    +--------------------+                   |
+|                                                             |
++-------------------------------------------------------------+
+```
+
 URL sau khi chạy bằng Docker:
 
 - User: `http://localhost:4175`
