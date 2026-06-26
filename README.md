@@ -1,203 +1,286 @@
-﻿# 🖥️ VGA Store — Cửa Hàng Card Màn Hình Online
+# VGA Store OWASP Lab
 
-<p align="center">
-  <img src="fontend/user/public/images/logo.png" alt="VGA Store Logo" width="160"/>
-</p>
+VGA Store OWASP Lab là ứng dụng thương mại điện tử bán VGA/card đồ họa dùng cho học tập và báo cáo bảo mật OWASP. Dự án mô phỏng đầy đủ luồng người dùng, quản trị và API backend, đồng thời có các điểm lab để kiểm thử SQL Injection trong môi trường cục bộ.
 
-<p align="center">
-  <b>Ứng dụng Thương mại Điện tử chuyên về Card Đồ Họa (VGA) được xây dựng theo kiến trúc Client - Server (Khách - Chủ) hiện đại, hỗ trợ Docker Containerization.</b>
-</p>
+> Chỉ sử dụng dự án này cho mục đích học tập, demo và kiểm thử trên môi trường được phép.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Spring_Boot-3.3.4-green?logo=springboot" />
-  <img src="https://img.shields.io/badge/React-18-blue?logo=react" />
-  <img src="https://img.shields.io/badge/PostgreSQL-17-blue?logo=postgresql" />
-  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker" />
-  <img src="https://img.shields.io/badge/Gemini_AI-1.5_Flash-orange?logo=google" />
-</p>
+## Thành Phần Chính
 
----
+| Thành phần | Công nghệ | Cổng Docker |
+|---|---|---|
+| User Frontend | React 19, Vite, Tailwind CSS | `4175` |
+| Admin Frontend | React 19, Vite, Redux Toolkit, Recharts | `4176` |
+| Backend API | Java 17, Spring Boot 3.3, Spring Security, JPA | `8082` |
+| Database | PostgreSQL 17 | `4434` |
 
-## 📋 Tổng Quan Dự Án
+URL sau khi chạy bằng Docker:
 
-**VGA Store** là một website bán hàng linh kiện máy tính (tập trung vào Card Đồ Họa) được xây dựng như một bài tập lớn môn học. Dự án bao gồm đầy đủ các tính năng của một nền tảng thương mại điện tử thực tế:
+- User: `http://localhost:4175`
+- Admin: `http://localhost:4176`
+- API: `http://localhost:8082/api`
+- PostgreSQL: `localhost:4434`
 
-- 🛒 Giỏ hàng, Đặt hàng, Thanh toán
-- ❤️ Danh sách yêu thích (Wishlist)
-- ⚖️ So sánh thông số kỹ thuật sản phẩm
-- 🤖 Trợ lý AI (Google Gemini) tư vấn mua hàng
-- 👤 Xác thực người dùng (Email/Password + Google OAuth)
-- 📊 Bảng quản trị Admin toàn diện
+## Chức Năng
 
----
+### Người dùng
 
-## 🏗️ Kiến Trúc Hệ Thống
+- Xem danh sách sản phẩm VGA, tìm kiếm, lọc theo hãng, giá và danh mục.
+- Xem chi tiết sản phẩm, đánh giá, sản phẩm liên quan.
+- Đăng ký, đăng nhập, đăng nhập Google.
+- Quản lý giỏ hàng, đặt hàng, theo dõi đơn hàng.
+- Thanh toán COD, VNPay sandbox và MoMo sandbox.
+- Xem bài viết/blog và thông tin chính sách dịch vụ.
+- Chat AI hỗ trợ tư vấn sản phẩm nếu cấu hình `VITE_GEMINI_API_KEY`.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Docker Network                       │
-│                                                         │
-│  ┌──────────────┐    ┌──────────────┐                   │
-│  │  User App    │    │  Admin App   │                   │
-│  │  React 18    │    │  React 18    │                   │
-│  │  Nginx       │    │  Nginx       │                   │
-│  │  Port: 5173  │    │  Port: 5174  │                   │
-│  └──────┬───────┘    └──────┬───────┘                   │
-│         │                  │                            │
-│         └────────┬─────────┘                            │
-│                  ↓                                      │
-│         ┌────────────────┐                              │
-│         │   Backend API  │                              │
-│         │  Spring Boot   │                              │
-│         │  Port: 8080    │                              │
-│         └───────┬────────┘                              │
-│                 ↓                                       │
-│         ┌────────────────┐                              │
-│         │  PostgreSQL 17 │                              │
-│         │  Port: 5433    │                              │
-│         └────────────────┘                              │
-└─────────────────────────────────────────────────────────┘
-```
+### Quản trị
 
-| Thành phần      | Công nghệ        | Cổng  |
-|-----------------|------------------|-------|
-| Frontend User   | React 18 + Vite  | 5173  |
-| Frontend Admin  | React 18 + Vite  | 5174  |
-| Backend API     | Spring Boot 3.3  | 8080  |
-| Database        | PostgreSQL 17    | 5433  |
+- Dashboard thống kê doanh thu, đơn hàng, sản phẩm và biểu đồ.
+- Quản lý sản phẩm, tồn kho, ảnh sản phẩm.
+- Quản lý danh mục, thương hiệu, bài viết.
+- Quản lý người dùng, vai trò, trạng thái tài khoản.
+- Quản lý đơn hàng, thanh toán, đánh giá và cài đặt hệ thống.
 
----
+### Lab OWASP
 
-## ✨ Tính Năng Nổi Bật
+Dự án có chủ đích giữ một số luồng phục vụ kiểm thử SQL Injection, ví dụ:
 
-### 👤 Phía Khách Hàng (User)
-- **Trang chủ:** Banner quảng cáo động, gợi ý sản phẩm nổi bật
-- **Cửa hàng:** Lọc theo Hãng, Danh mục, Khoảng giá, Tìm kiếm
-- **Chi tiết sản phẩm:** Thông số kỹ thuật đầy đủ, Hình ảnh, Đánh giá & Bình luận
-- **Giỏ hàng & Thanh toán:** Quản lý số lượng, áp dụng thông tin giao hàng
-- **Đơn hàng:** Theo dõi trạng thái đơn hàng theo thời gian thực
-- **Tài khoản:** Thông tin cá nhân, Đổi mật khẩu, Địa chỉ giao hàng
-- **So sánh sản phẩm:** So sánh thông số kỹ thuật tối đa 3 sản phẩm cùng lúc
-- **Trợ lý AI (Gemini):** Chat tư vấn mua hàng thông minh, gợi ý sản phẩm phù hợp
+- Endpoint tìm kiếm sản phẩm lab: `GET /api/products/search-vulnerable`.
+- Các nhánh/phiên bản có thể được dùng để so sánh giữa bản có lỗi và bản đã khắc phục.
+- Một số phần code có comment hoặc endpoint riêng cho mục đích đào tạo.
 
-### 🛠️ Phía Quản Trị (Admin)
-- Quản lý Sản phẩm (CRUD đầy đủ, upload ảnh)
-- Quản lý Đơn hàng (Xem chi tiết, Cập nhật trạng thái)
-- Quản lý Người dùng
-- Quản lý Danh mục & Thương hiệu
-- Dashboard thống kê tổng quan
+Không dùng các endpoint lab như một mẫu triển khai production.
 
----
+## Cấu Trúc Thư Mục
 
-## 🚀 Hướng Dẫn Chạy Dự Án
-
-### ✅ Phương Pháp 1: Chạy bằng Docker (Khuyến nghị — Không cần cài Java, Node, PostgreSQL)
-
-**Yêu cầu duy nhất:** Cài [Docker Desktop](https://www.docker.com/products/docker-desktop/) và bật nó lên.
-
-```bash
-# Bước 1: Clone dự án về máy
-git clone https://github.com/thanhhai375/vga-store.git
-cd vga-store
-
-# Bước 2: Khởi động toàn bộ hệ thống (lần đầu sẽ mất 2-5 phút để build)
-docker-compose up --build -d
-
-# Bước 3: Mở trình duyệt
-# Trang khách hàng: http://localhost:5173
-# Trang quản trị:   http://localhost:5174
+```text
+vga-store-owasp/
+|-- backend/
+|   `-- vgashop/              # Spring Boot backend
+|-- database/
+|   |-- create_tables.sql     # Schema PostgreSQL
+|   |-- seed_vga.sql          # Dữ liệu mẫu chính
+|   |-- mock_data.sql         # Dữ liệu mẫu phụ
+|   `-- Dockerfile            # Image database có seed dữ liệu
+|-- fontend/
+|   |-- user/                 # Giao diện khách hàng
+|   `-- admin/                # Giao diện quản trị
+|-- docs/                     # Tài liệu/báo cáo bổ sung nếu có
+|-- docker-compose.yml
+`-- README.md
 ```
 
-> **Dừng hệ thống:** `docker-compose down`
-> **Khởi động lại (không build lại):** `docker-compose up -d`
+Lưu ý: thư mục frontend trong repo hiện được đặt tên là `fontend`.
 
----
+## Chạy Nhanh Bằng Docker
 
-### 🔧 Phương Pháp 2: Chạy thủ công (Cần cài Java 17, Node 18+, PostgreSQL 17)
+Yêu cầu:
 
-**Bước 1: Tạo Database**
-```sql
--- Trong PostgreSQL, tạo database tên "vga_store"
-CREATE DATABASE vga_store;
--- Chạy 2 file SQL theo thứ tự:
--- database/create_tables.sql
--- database/seed_vga.sql
+- Docker Desktop
+- Git
+
+Chạy toàn bộ hệ thống:
+
+```powershell
+docker compose up -d --build
 ```
 
-**Bước 2: Khởi động Backend**
-```bash
+Kiểm tra container:
+
+```powershell
+docker compose ps
+```
+
+Dừng hệ thống:
+
+```powershell
+docker compose down
+```
+
+Nếu muốn xóa cả dữ liệu PostgreSQL và chạy lại từ seed:
+
+```powershell
+docker compose down -v
+docker compose up -d --build
+```
+
+## Chạy Local Khi Phát Triển
+
+### Backend
+
+Yêu cầu:
+
+- Java 17
+- Maven hoặc Maven Wrapper có sẵn trong `backend/vgashop`
+- PostgreSQL đang chạy và có database `vga_store`
+
+Chạy backend:
+
+```powershell
 cd backend/vgashop
-# Sửa application.properties nếu cần thay đổi thông tin kết nối DB
-./mvnw spring-boot:run
-# Backend chạy tại: http://localhost:8080
+.\mvnw.cmd spring-boot:run
 ```
 
-**Bước 3: Khởi động Frontend User**
-```bash
+Mặc định file `application.properties` dùng:
+
+- JDBC URL: `jdbc:postgresql://localhost:5432/vga_store`
+- Username: `postgres`
+- Password: `1234567`
+- Backend local: `http://localhost:8080`
+
+Khi chạy bằng Docker Compose, các biến môi trường trong `docker-compose.yml` sẽ ghi đè cấu hình database và backend được map ra `http://localhost:8082`.
+
+### User Frontend
+
+```powershell
 cd fontend/user
 npm install
 npm run dev
-# Truy cập: http://localhost:5173
 ```
 
-**Bước 4: Khởi động Frontend Admin**
-```bash
+Vite mặc định chạy ở `http://localhost:5173`.
+
+Nếu dùng AI chat, tạo file `.env` từ `.env.example`:
+
+```powershell
+copy .env.example .env
+```
+
+Sau đó điền:
+
+```env
+VITE_GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+### Admin Frontend
+
+```powershell
 cd fontend/admin
 npm install
 npm run dev
-# Truy cập: http://localhost:5174
 ```
 
----
+Admin Vite đang cấu hình chạy ở `http://localhost:5174`.
 
-## 🔑 Tài Khoản Mặc Định
+## Tài Khoản Demo
 
-| Vai trò  | Email                   | Mật khẩu    |
-|----------|-------------------------|-------------|
-| Admin    | hai123      | hai123     |
-| Khách hàng | Đăng nhập gg hoặc tạo tk |
+Dữ liệu mẫu nằm trong `database/seed_vga.sql`. Một số tài khoản có sẵn:
 
----
+| Vai trò | Username | Ghi chú |
+|---|---|---|
+| Admin | `admin` | Tài khoản seed chính |
+| Admin | `hai123` | Tài khoản admin mẫu trong seed |
 
-## 📂 Cấu Trúc Thư Mục
+Mật khẩu phụ thuộc dữ liệu seed/hash hiện tại. Nếu không đăng nhập được, có thể chạy lại database từ seed hoặc tạo admin mới qua API/chức năng quản trị tùy phiên bản đang dùng. Khi backend tự seed database rỗng, tài khoản mặc định trong `DataSeeder` là:
 
-```
-vga-store/
-├── backend/
-│   └── vgashop/              # Spring Boot API Server
-│       ├── src/main/java/    # Source code Java
-│       ├── src/main/resources/
-│       │   └── application.properties
-│       └── Dockerfile
-├── database/
-│   ├── create_tables.sql     # Script tạo toàn bộ bảng
-│   └── seed_vga.sql          # Script nạp dữ liệu mẫu (79 sản phẩm)
-├── fontend/
-│   ├── user/                 # React App dành cho khách hàng
-│   │   ├── src/
-│   │   │   ├── pages/        # Các trang (Home, Shop, Cart...)
-│   │   │   ├── components/   # Components dùng chung (ProductCard, Header...)
-│   │   │   └── redux/        # State management (Cart, Auth, Compare...)
-│   │   └── Dockerfile
-│   └── admin/                # React App dành cho quản trị viên
-│       └── Dockerfile
-└── docker-compose.yml        # Orchestration toàn bộ hệ thống
+```text
+Username: admin
+Password: 123
 ```
 
----
+## API Chính
 
-## 🤖 Tính Năng AI Chat
+Một số nhóm API chính:
 
-Dự án tích hợp **Google Gemini 1.5 Flash** làm trợ lý tư vấn bán hàng. AI này hiểu toàn bộ danh mục sản phẩm của cửa hàng và có thể:
-- Tư vấn chọn card màn hình phù hợp theo ngân sách
-- So sánh các dòng GPU
-- Trả lời câu hỏi về build PC, gaming
+| Nhóm | Đường dẫn |
+|---|---|
+| Xác thực | `/api/auth/**` |
+| Sản phẩm | `/api/products/**` |
+| Danh mục | `/api/categories/**` |
+| Thương hiệu | `/api/brands/**` |
+| Giỏ hàng | `/api/cart/**` |
+| Đơn hàng | `/api/orders/**` |
+| Thanh toán | `/api/payments/**` |
+| Blog | `/api/blogs/**` |
+| Quản trị | `/api/admin/**` |
 
-API Key đã được cấu hình sẵn trong file `fontend/user/.env`. Nếu hết quota, bạn có thể lấy key miễn phí tại [Google AI Studio](https://aistudio.google.com/).
+Các API quản trị yêu cầu token có vai trò `ADMIN`.
 
----
+## Ghi Chú Về Branch Và SQL Injection
 
-## 👨‍💻 Thông Tin Nhóm
+Repo có thể có nhiều branch phục vụ báo cáo:
 
-> Nhóm 9 - Môn Thiết Kế Cơ Sở Dữ Liệu
+- `tanvinh`: bản lab/demo, có thể chứa các điểm SQL Injection có chủ đích.
+- `tanvinh_fix_sqli`: bản dùng để đối chiếu sau khi khắc phục nếu branch tồn tại trong repo.
+- `main`: nhánh chính của dự án, trạng thái phụ thuộc lần merge gần nhất.
 
+Trước khi kết luận một branch đã an toàn, cần kiểm tra trực tiếp code và retest payload. README này mô tả dự án hiện tại ở góc độ lab, không cam kết toàn bộ endpoint đã đạt chuẩn production.
+
+## Kiểm Thử Và Build
+
+Backend:
+
+```powershell
+cd backend/vgashop
+.\mvnw.cmd test
+```
+
+Build frontend user:
+
+```powershell
+cd fontend/user
+npm run build
+```
+
+Build frontend admin:
+
+```powershell
+cd fontend/admin
+npm run build
+```
+
+Lint frontend:
+
+```powershell
+npm run lint
+```
+
+Chạy trong từng thư mục frontend tương ứng.
+
+## Xử Lý Lỗi Thường Gặp
+
+### Docker không tải được image
+
+Nếu gặp lỗi dạng:
+
+```text
+lookup registry-1.docker.io: no such host
+```
+
+hãy kiểm tra Internet, DNS, VPN/proxy hoặc khởi động lại Docker Desktop.
+
+### Frontend không gọi được API
+
+Kiểm tra backend đã chạy ở đúng cổng:
+
+- Docker: `http://localhost:8082/api`
+- Local Spring Boot: `http://localhost:8080/api`
+
+Frontend hiện đang cấu hình gọi `http://localhost:8082/api`, phù hợp với Docker Compose. Nếu chạy backend local ở cổng `8080`, cần chỉnh base URL trong:
+
+- `fontend/user/src/api/axiosClient.js`
+- `fontend/admin/src/api/axiosClient.js`
+
+### Lệnh `vite` không chạy
+
+Cài dependency trước:
+
+```powershell
+npm install
+npm run dev
+```
+
+### Muốn seed lại dữ liệu
+
+Dữ liệu PostgreSQL được lưu trong Docker volume `pgdata`. Muốn tạo lại database từ đầu:
+
+```powershell
+docker compose down -v
+docker compose up -d --build
+```
+
+## Lưu Ý Bảo Mật
+
+- Không dùng cấu hình, khóa sandbox hoặc tài khoản demo trong môi trường production.
+- Không expose database hoặc API lab ra Internet.
+- Các payload và endpoint SQLi chỉ phục vụ học tập trong môi trường cục bộ.
+- Khi phát triển bản production, cần loại bỏ endpoint lab, dùng parameter binding nhất quán, kiểm soát phân quyền, ẩn lỗi nội bộ và kiểm thử lại toàn bộ luồng xác thực.
