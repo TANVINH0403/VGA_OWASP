@@ -31,7 +31,6 @@ const Shop = () => {
     return normalizeSearchMode(queryParams.get('mode'));
   });
   const [serverSearchActive, setServerSearchActive] = useState(false);
-  const [sqliEvidence, setSqliEvidence] = useState(null);
   const [sortOrder, setSortOrder] = useState('default');
 
   const [selectedBrands, setSelectedBrands] = useState([]);
@@ -92,27 +91,19 @@ const Shop = () => {
 
           if (!cancelled) {
             setAllProducts(result.items);
-            setSqliEvidence(result.evidence);
             setServerSearchActive(true);
           }
         } else {
           const products = await productService.getAll({ size: 100 });
           if (!cancelled) {
             setAllProducts(products);
-            setSqliEvidence(null);
             setServerSearchActive(false);
           }
         }
       } catch (error) {
         if (!cancelled) {
+          console.error('Search request failed:', error);
           setAllProducts([]);
-          setSqliEvidence({
-            endpoint: '/api/products/search-vulnerable',
-            status: 'CLIENT',
-            durationMs: 0,
-            responseSize: 0,
-            preview: error.message,
-          });
           setServerSearchActive(true);
         }
       } finally {
@@ -266,17 +257,6 @@ const Shop = () => {
       setLoadingMore(false);
     }, 400);
   };
-
-  const evidencePreview = sqliEvidence
-    ? (typeof sqliEvidence.preview === 'string'
-        ? sqliEvidence.preview
-        : JSON.stringify(sqliEvidence.preview, null, 2))
-    : '';
-  const evidenceType = sqliEvidence?.durationMs >= 4500
-    ? 'Time-based indicator'
-    : sqliEvidence?.status >= 500
-      ? 'Error-based indicator'
-      : 'Boolean/Union indicator';
 
   return (
     <div className="shop-page">
@@ -447,34 +427,6 @@ const Shop = () => {
                 </select>
               </div>
             </div>
-
-            {sqliEvidence && (
-              <div className="sqli-shop-evidence">
-                <div className="sqli-shop-evidence-header">
-                  <strong>SQLi evidence</strong>
-                  <span>{sqliEvidence.endpoint}</span>
-                </div>
-                <div className="sqli-shop-evidence-request">
-                  <span>Payload</span>
-                  <code>{sqliEvidence.payload}</code>
-                  <span>Request URL</span>
-                  <code>{sqliEvidence.requestUrl}</code>
-                </div>
-                <div className="sqli-shop-evidence-grid">
-                  <span>Status</span>
-                  <strong>{sqliEvidence.status}</strong>
-                  <span>Duration</span>
-                  <strong>{sqliEvidence.durationMs} ms</strong>
-                  <span>Response size</span>
-                  <strong>{sqliEvidence.responseSize}</strong>
-                  <span>Records</span>
-                  <strong>{sqliEvidence.recordCount}</strong>
-                  <span>Evidence type</span>
-                  <strong>{evidenceType}</strong>
-                </div>
-                <pre>{evidencePreview.slice(0, 2400)}</pre>
-              </div>
-            )}
 
             {loading ? (
               <div className="shop-loading">
